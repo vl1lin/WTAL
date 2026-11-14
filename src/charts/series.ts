@@ -148,6 +148,43 @@ function loglogSeries(chart: ChartDef, study: Study, colors: [string, string], s
  * @returns серии и подписи осей
  */
 export function buildChartData(chart: ChartDef, project: Project): ChartData {
+  const data = buildChartDataRaw(chart, project);
+  if (data.warning || chart.kind === "columns" || chart.kind === "rates" || chart.kind === "combo") return data;
+  // Пустой график — объяснить почему, а не показывать пустоту.
+  const ok = (v: number, log: boolean): boolean => Number.isFinite(v) && (!log || v > 0);
+  const visible = data.series.some((s) => s.studyId === chart.studyId && s.points.some((p) => ok(p.x, chart.xLog) && ok(p.y, chart.yLog)));
+  if (visible) return data;
+  const study = project.studies.find((s) => s.id === chart.studyId);
+  return study ? { ...data, warning: diagnoseEmpty(chart, study) } : data;
+}
+
+/**
+ * Причина, по которой на графике нет точек.
+ * @param chart график
+ * @param study исследование
+ * @returns текст подсказки
+ */
+function diagnoseEmpty(chart: ChartDef, study: Study): string {
+  const b = baseData(study, sheetOf(study));
+  const allowed = chart.rows ? new Set(chart.rows) : null;
+  const idx = b.rows.map((r, i) => (allowed && !allowed.has(r) ? -1 : i)).filter((i) => i >= 0);
+  if (idx.length === 0) return "В выбранных строках нет времени и давления";
+  const after = idx.filter((i) => (b.dt_s[i] ?? 0) > 0);
+  if (after.length === 0) {
+    return `Все точки до начала периода (Δt ≤ 0). Период начинается с последнего изменения дебита — ${fmtH(b.tStart_s)} ч от начала записи. Выделите точки после него или проверьте таблицу дебитов`;
+  }
+  const dp = deltaP(study, b);
+  const needDp = chart.kind === "loglog" || chart.yFn === "dp";
+  if (needDp && (chart.kind === "loglog" || chart.yLog) && after.every((i) => (dp[i] ?? 0) <= 0)) {
+    return "Δp ≤ 0 у всех точек — тип периода (КВД/КСД) не совпадает с данными. Проверьте ⚙ настройки исследования или таблицу дебитов";
+  }
+  if (chart.xLog || chart.yLog) return "Нет точек с положительными значениями для логарифмической оси — переключите шкалу на линейную";
+  return "Нет точек для выбранной функции времени и суперпозиции (проверьте tp и таблицу дебитов)";
+}
+
+const fmtH = (s: number): string => String(Number((s / 3600).toPrecision(5))).replace(".", ",");
+
+function buildChartDataRaw(chart: ChartDef, project: Project): ChartData {
   const study = project.studies.find((s) => s.id === chart.studyId);
   if (!study) return { series: [], xLabel: "", yLabel: "", warning: "Исследование удалено" };
   const sheet = sheetOf(study);

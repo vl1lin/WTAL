@@ -68,8 +68,12 @@ function Preview({ chart, height = 300 }: { chart: ChartDef; height?: number }) 
   const project = useApp((s) => s.project);
   const sel = useApp((s) => s.selection[chart.studyId]);
   const data = useMemo(() => buildChartData(chart, project), [chart, project]);
-  const [view, setView] = useState<ChartDef["view"]>(undefined);
-  const c = { ...chart, view };
+  // Масштаб предпросмотра сбрасывается при смене вида графика, функций и шкал.
+  const viewKey = `${chart.kind}|${chart.timeFn}|${chart.superposition}|${chart.yFn}|${chart.xLog}|${chart.yLog}|${chart.normalizeByRate}`;
+  const [local, setLocal] = useState<{ key: string; view: ChartDef["view"] }>({ key: viewKey, view: undefined });
+  const view = local.key === viewKey ? local.view : undefined;
+  const setView = (v: ChartDef["view"]): void => setLocal({ key: viewKey, view: v });
+  const c = { ...chart, view: view ?? chart.view };
   return (
     <div className="preview" style={{ height }}>
       <ChartView
