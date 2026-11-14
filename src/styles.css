@@ -157,6 +157,9 @@ kbd { padding: 0 5px; border: 1px solid #94a3b8; border-radius: 3px; background:
 .win-btn.dark:hover { background: #f1f5f9; }
 .win-body { position: relative; flex: 1 1 auto; min-height: 0; }
 .chart-canvas-wrap { position: absolute; inset: 0; }
+.combo { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.combo-top { position: relative; flex: 62 1 0; min-height: 0; }
+.combo-bot { position: relative; flex: 38 1 0; min-height: 0; border-top: 2px solid #334155; }
 .chart-legend { position: absolute; left: 72px; top: 16px; display: flex; flex-direction: column; gap: 2px; padding: 5px 8px; background: rgba(15, 23, 42, 0.78); border: 1px solid #334155; border-radius: 4px; color: #e2e8f0; font-size: 11px; pointer-events: none; }
 .chart-legend:empty { display: none; }
 .chart-legend i { font-style: normal; font-weight: 700; }

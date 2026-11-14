@@ -22,6 +22,9 @@ import { autoView, fromAxis, toAxis } from "../charts/geometry";
 import { toSI } from "../core/units";
 import { representativeRate } from "../core/welltest";
 
+/** Графики истории не имеют параметров функции времени/давления. */
+const isHistoryKind = (k: ChartDef["kind"]): boolean => k === "history" || k === "rates" || k === "combo";
+
 const TIME_FNS: [TimeFn, string, string][] = [
   ["dt", "Δt", ""],
   ["log", "log(Δt)", ""],
@@ -94,7 +97,7 @@ function FlexFields({ c, set }: { c: ChartDef; set(p: Partial<ChartDef>): void }
   return (
     <div className="two-col">
       <div className="col gap">
-        {!loglog && c.kind !== "history" && (
+        {!loglog && !isHistoryKind(c.kind) && (
           <fieldset>
             <legend>Функция времени (ось X)</legend>
             {c.kind === "semilog" ? (
@@ -106,7 +109,7 @@ function FlexFields({ c, set }: { c: ChartDef; set(p: Partial<ChartDef>): void }
             )}
           </fieldset>
         )}
-        {c.kind !== "history" && (
+        {!isHistoryKind(c.kind) && (
           <fieldset>
             <legend>Суперпозиция{loglog ? " (для производной)" : ""}</legend>
             {SUPS.map(([v, l]) => (
@@ -122,7 +125,7 @@ function FlexFields({ c, set }: { c: ChartDef; set(p: Partial<ChartDef>): void }
         )}
       </div>
       <div className="col gap">
-        {!loglog && c.kind !== "history" && (
+        {!loglog && !isHistoryKind(c.kind) && (
           <fieldset>
             <legend>Функция давления (ось Y)</legend>
             <Radio name="yf" value="p" current={c.yFn} onChange={(yFn) => set({ yFn })} label="P" />
@@ -130,7 +133,7 @@ function FlexFields({ c, set }: { c: ChartDef; set(p: Partial<ChartDef>): void }
             <Radio name="yf2" value="x" current="" disabled onChange={() => undefined} label="P², m(P), P/Z — для газа (позже)" />
           </fieldset>
         )}
-        {c.kind !== "history" && (
+        {!isHistoryKind(c.kind) && (
           <fieldset>
             <legend>Нормировка</legend>
             <label className="row gap small">

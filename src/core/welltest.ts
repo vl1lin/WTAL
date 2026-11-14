@@ -7,6 +7,7 @@
  *        tStart_s — начало анализируемого периода = последнее изменение дебита
  *                   (если таблицы дебитов нет — первая строка давления)
  *        dt_s     — время от начала периода (Δt), hist_s — время от первой строки давления
+ *   ├─ effectiveTestType()              — КВД/КСД по направлению последнего изменения дебита
  *   ├─ deltaP()                         — Δp от давления p0 в момент tStart (КВД: p − p0, КСД: p0 − p), Па
  *   ├─ rateEvents()                     — история дебитов относительно tStart (для суперпозиции)
  *   ├─ producingTime()                  — tp: длительность работы до последнего изменения режима
@@ -159,6 +160,27 @@ export function baseData(study: Study, sheet: Sheet): BaseData {
 }
 
 /**
+ * Тип периода: по таблице дебитов — снижение дебита в начале периода означает КВД, рост — КСД;
+ * без таблицы — как задано в исследовании.
+ * @param study исследование
+ * @param base ряды в СИ
+ * @returns "buildup" или "drawdown"
+ */
+export function effectiveTestType(study: Study, base: BaseData): Study["testType"] {
+  const r = base.rates;
+  if (!r || r.length === 0) return study.testType;
+  let qPrev = 0;
+  let qNow = Number.NaN;
+  for (const e of r) {
+    if (e.t_s > base.tStart_s + 1e-9) break;
+    if (Number.isFinite(qNow) && Math.abs(e.q_m3_s - qNow) > 1e-12 * Math.max(1, Math.abs(qNow))) qPrev = qNow;
+    qNow = e.q_m3_s;
+  }
+  if (!Number.isFinite(qNow) || qNow === qPrev) return study.testType;
+  return qNow < qPrev ? "buildup" : "drawdown";
+}
+
+/**
  * Перепад давления относительно давления в начале периода.
  * @param study исследование (тип КВД/КСД)
  * @param base ряды в СИ
@@ -166,7 +188,8 @@ export function baseData(study: Study, sheet: Sheet): BaseData {
  */
 export function deltaP(study: Study, base: BaseData): number[] {
   const p0 = base.p0_Pa;
-  return base.p_Pa.map((p) => (study.testType === "buildup" ? p - p0 : p0 - p));
+  const type = effectiveTestType(study, base);
+  return base.p_Pa.map((p) => (type === "buildup" ? p - p0 : p0 - p));
 }
 
 export interface RateEvent {

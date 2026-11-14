@@ -24,6 +24,7 @@ const KIND_NAMES: Record<ChartKind, string> = {
   semilog: "Semilog",
   history: "История давления",
   rates: "История дебитов",
+  combo: "История: давление и дебит",
   flex: "Произвольный",
   columns: "По столбцам",
 };

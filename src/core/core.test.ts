@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { colIndex, colLetter, parse, shiftFormula } from "./formula";
 import { computeSheet, parseDateTime, parsePasted } from "./sheet";
-import { baseData, bourdetDerivative, deltaP, producingTime, rateEvents, superposedTime } from "./welltest";
+import { baseData, bourdetDerivative, deltaP, effectiveTestType, producingTime, rateEvents, superposedTime } from "./welltest";
 import { fitTrend } from "./regression";
 import { fractureArea } from "./fracture";
 import type { CalcState, Column, Study } from "./types";
@@ -165,6 +165,12 @@ describe("раздельные таблицы давления и дебитов
     const st = mk(["12.03.2026 08:00", "12.03.2026 10:00"], ["150", "151"], ["-24", "1"], ["22", "0"], true, false);
     const b = baseData(st, computeSheet(st));
     expect(b.tStart_s).toBe(3600);
+  });
+  it("тип периода определяется по направлению изменения дебита", () => {
+    const st = mk(["0", "5", "6"], ["150", "148", "140"], ["-100", "-50", "5"], ["22", "0", "30"]);
+    const b = baseData(st, computeSheet(st));
+    expect(effectiveTestType(st, b)).toBe("drawdown");
+    expect(deltaP(st, b)[2]).toBeCloseTo(8 * 101_325, 6);
   });
   it("без таблицы дебитов — прежнее поведение (от первой строки)", () => {
     const st = { ...mk(["0", "1"], ["150", "151"], [], []), rateColumns: [], rateRoles: {} };

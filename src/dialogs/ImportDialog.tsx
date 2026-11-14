@@ -71,7 +71,7 @@ export function ImportDialog({ initialPart }: { initialPart: TablePart }) {
   const [name, setName] = useState(`Исследование ${studies.length + 1}`);
   const [testType, setTestType] = useState<TestType>("buildup");
   const [maps, setMaps] = useState<ColMap[]>([]);
-  const [charts, setCharts] = useState<Record<ChartKind, boolean>>({ loglog: true, history: true, flex: true, semilog: false, rates: true, columns: false });
+  const [charts, setCharts] = useState<Record<ChartKind, boolean>>({ loglog: true, history: false, flex: true, semilog: false, rates: false, combo: true, columns: false });
 
   const parsed = useMemo(() => (text.trim() ? parsePasted(text, delim, header, skip) : null), [text, delim, header, skip]);
   const nCols = parsed ? Math.max(parsed.headers?.length ?? 0, ...parsed.rows.map((r) => r.length)) : 0;
@@ -136,14 +136,15 @@ export function ImportDialog({ initialPart }: { initialPart: TablePart }) {
         tpSeconds: 0,
         rateBeforeM3s: 0,
       };
-      const kinds = (Object.keys(charts) as ChartKind[]).filter((k) => charts[k] && (part === "p" || k === "rates"));
+      const kinds = (Object.keys(charts) as ChartKind[]).filter((k) => charts[k] && (part === "p" || k === "rates" || k === "combo"));
       st.addStudy(study, kinds);
     } else {
       if (tableHasData(part === "q" ? targetStudy.rateColumns : targetStudy.columns) &&
         !confirm(`Заменить таблицу ${part === "q" ? "дебитов" : "давления"} исследования «${targetStudy.name}»?`)) return;
       st.replaceTable(targetStudy.id, part, cols);
-      if (part === "q" && !useApp.getState().project.charts.some((c) => c.studyId === targetStudy.id && c.kind === "rates") && charts.rates) {
-        st.addChart(newChart("rates", targetStudy.id, { name: "История дебитов" }));
+      const has = (k: ChartKind): boolean => useApp.getState().project.charts.some((c) => c.studyId === targetStudy.id && c.kind === k);
+      if (part === "q" && !has("rates") && !has("combo")) {
+        st.addChart(newChart("combo", targetStudy.id, { name: "История: давление и дебит" }));
       }
       st.updateStudy(targetStudy.id, { testType });
       st.setActiveStudy(targetStudy.id);
@@ -296,7 +297,7 @@ export function ImportDialog({ initialPart }: { initialPart: TablePart }) {
       {part === "p" && isNew && (
         <div className="row gap wrap small" style={{ marginTop: 12 }}>
           <b>Создать графики:</b>
-          {([["loglog", "Log-log"], ["history", "История давления"], ["flex", "√t (линейный поток)"], ["semilog", "Semilog"], ["rates", "История дебитов"]] as const).map(([k, l]) => (
+          {([["loglog", "Log-log"], ["combo", "Давление + дебит"], ["flex", "√t (линейный поток)"], ["semilog", "Semilog"], ["history", "История давления"], ["rates", "История дебитов"]] as const).map(([k, l]) => (
             <label key={k}><input type="checkbox" checked={charts[k]} onChange={(e) => setCharts({ ...charts, [k]: e.target.checked })} /> {l}</label>
           ))}
         </div>

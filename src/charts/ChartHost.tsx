@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChartDef, View } from "../core/types";
 import { useApp, tileCharts } from "../store";
-import { buildChartData } from "./series";
+import { buildChartData, rateChangeHours } from "./series";
 import { ChartView } from "./ChartView";
 import { autoView } from "./geometry";
 import { Icon } from "../ui/icons";
@@ -29,7 +29,91 @@ function applySelection(studyId: string, rows: number[], additive: boolean): voi
   st.setSelection(studyId, additive ? [...cur, ...rows] : rows);
 }
 
+/** График в окне: обычный или пара «давление + дебит» с общей осью времени. */
 export function ChartHost({ chart }: { chart: ChartDef }) {
+  return chart.kind === "combo" ? <ComboHost chart={chart} /> : <SingleHost chart={chart} />;
+}
+
+/**
+ * Пара графиков: давление (сверху) и дебит (снизу).
+ * Ось X общая: масштаб и сдвиг по времени в любом из графиков применяются к обоим (view и view2);
+ * ось Y у каждого своя. Пунктир — моменты смены режима.
+ */
+function ComboHost({ chart }: { chart: ChartDef }) {
+  const project = useApp((s) => s.project);
+  const tool = useApp((s) => s.tool);
+  const multi = useApp((s) => s.multiSelect);
+  const sel = useApp((s) => s.selection[chart.studyId]);
+  const selectedLine = useApp((s) => s.selectedLine);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const study = project.studies.find((s) => s.id === chart.studyId);
+  const topChart = useMemo<ChartDef>(() => ({ ...chart, kind: "history", xLog: false, yLog: false }), [chart]);
+  const botChart = useMemo<ChartDef>(() => ({ ...chart, kind: "rates", xLog: false, yLog: false, lines: [], defaultView: undefined }), [chart]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const topData = useMemo(() => buildChartData(topChart, project), [study, chart.rows]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const botData = useMemo(() => buildChartData(botChart, project), [study]);
+  const vLines = useMemo(() => (study ? rateChangeHours(study) : []), [study]);
+  const selected = useMemo(() => new Set(sel ?? []), [sel]);
+  const st = useApp.getState();
+
+  // Общий автодиапазон времени по обоим графикам.
+  const autoTop = autoView(topData.series, false, false);
+  const autoBot = autoView(botData.series, false, false);
+  const hasTop = topData.series.some((s) => s.points.length > 0);
+  const hasBot = botData.series.some((s) => s.points.length > 0);
+  const xmin = hasTop && hasBot ? Math.min(autoTop.xmin, autoBot.xmin) : hasBot ? autoBot.xmin : autoTop.xmin;
+  const xmax = hasTop && hasBot ? Math.max(autoTop.xmax, autoBot.xmax) : hasBot ? autoBot.xmax : autoTop.xmax;
+  const topView: View = chart.view ?? chart.defaultView ?? { ...autoTop, xmin, xmax };
+  const botView: View = { ...(chart.view2 ?? autoBot), xmin: topView.xmin, xmax: topView.xmax };
+  const common = {
+    tool,
+    multi,
+    vLines,
+    onActivate: () => {
+      if (useApp.getState().activeChartId !== chart.id) st.setActiveChart(chart.id);
+    },
+    onContextMenu: (x: number, y: number) => setMenu({ x, y }),
+  };
+  return (
+    <div className="combo">
+      <div className="combo-top">
+        <ChartView
+          {...common}
+          compactX
+          chart={{ ...topChart, view: topView }}
+          data={topData}
+          selected={selected}
+          selectedLineId={selectedLine?.chartId === chart.id ? selectedLine.lineId : null}
+          onView={(v) => st.updateChart(chart.id, { view: v, view2: { ...botView, xmin: v.xmin, xmax: v.xmax } })}
+          onSelectRows={(rows, add) => applySelection(chart.studyId, rows, add)}
+          onAddLine={(l) => st.addLine(chart.id, l)}
+          onUpdateLine={(id, patch) => st.updateLine(chart.id, id, patch)}
+          onSelectLine={(id, info) => st.selectLine(id ? { chartId: chart.id, lineId: id } : null, info)}
+        />
+      </div>
+      <div className="combo-bot">
+        <ChartView
+          {...common}
+          chart={{ ...botChart, view: botView }}
+          data={botData}
+          selected={EMPTY}
+          selectedLineId={null}
+          onView={(v) => st.updateChart(chart.id, { view2: v, view: { ...topView, xmin: v.xmin, xmax: v.xmax } })}
+          onSelectRows={() => undefined}
+          onAddLine={() => undefined}
+          onUpdateLine={() => undefined}
+          onSelectLine={() => undefined}
+        />
+      </div>
+      {menu && <ChartContextMenu chart={chart} x={menu.x} y={menu.y} onClose={() => setMenu(null)} autoV={() => ({ ...autoTop, xmin, xmax })} />}
+    </div>
+  );
+}
+
+const EMPTY = new Set<number>();
+
+function SingleHost({ chart }: { chart: ChartDef }) {
   const project = useApp((s) => s.project);
   const tool = useApp((s) => s.tool);
   const multi = useApp((s) => s.multiSelect);
@@ -134,9 +218,9 @@ function ChartContextMenu(props: { chart: ChartDef; x: number; y: number; onClos
         st.updateChart(chart.id, { theme: chart.theme === "dark" ? "light" : "dark" }),
       )}
       <hr />
-      {item("Масштаб по умолчанию", () => st.updateChart(chart.id, { view: chart.defaultView }))}
+      {item("Масштаб по умолчанию", () => st.updateChart(chart.id, { view: chart.defaultView, view2: undefined }))}
       {item("Сохранить масштаб как по умолчанию", () => st.updateChart(chart.id, { defaultView: chart.view ?? props.autoV() }))}
-      {item("Сбросить сохранённый масштаб", () => st.updateChart(chart.id, { defaultView: undefined, view: undefined }))}
+      {item("Сбросить сохранённый масштаб", () => st.updateChart(chart.id, { defaultView: undefined, view: undefined, view2: undefined }))}
       <hr />
       {item("Линия тренда по выделенным…", () => st.setDialog({ kind: "trend", chartId: chart.id }))}
       {item("Экспорт PNG", () => exportPng(chart))}

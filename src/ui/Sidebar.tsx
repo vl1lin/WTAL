@@ -2,7 +2,7 @@
  * Левая панель инструментов с раскрывающимися группами.
  *
  * Схема групп:
- *   Графики  — Log-log, Semilog, История давления, История дебитов, Произвольный (диалог), По столбцам (диалог)
+ *   Графики  — Log-log, Semilog, История давления, История дебитов, Давление + дебит, Произвольный (диалог), По столбцам (диалог)
  *   Данные   — выделение прямоугольником / лассо / кликом, «Множество точек», снять выделение
  *   Прямые   — по 2 точкам, тренд (диалог), выбрать, инфо, изменить, удалить
  *   График   — параметры/оси, приблизить (рамкой), отдалить, по умолчанию, сохранить масштаб, рука, скрыть
@@ -66,7 +66,12 @@ export function Sidebar() {
   };
   const add = (kind: ChartKind): void => {
     if (!studyId) return;
-    const names: Partial<Record<ChartKind, string>> = { semilog: "Semilog", history: "История давления", rates: "История дебитов" };
+    const names: Partial<Record<ChartKind, string>> = {
+      semilog: "Semilog",
+      history: "История давления",
+      rates: "История дебитов",
+      combo: "История: давление и дебит",
+    };
     const study = useApp.getState().project.studies.find((s) => s.id === studyId);
     st.addChart(newChart(kind, studyId, { name: kind === "loglog" ? `Диагностика ${study?.name ?? ""} (log-log)` : (names[kind] ?? kind) }));
     if (view === "calc") st.setView("split");
@@ -89,6 +94,7 @@ export function Sidebar() {
         <ToolBtn icon="semilog" label="Semilog" disabled={noStudy} onClick={() => add("semilog")} />
         <ToolBtn icon="history" label="История" disabled={noStudy} onClick={() => add("history")} title="История давления" />
         <ToolBtn icon="rates" label="Дебиты" disabled={noStudy} onClick={() => add("rates")} title="История дебитов (ступенчатый график)" />
+        <ToolBtn icon="combo" label="Давл. + дебит" disabled={noStudy} onClick={() => add("combo")} title="Давление сверху, дебит снизу, общая ось времени" />
         <ToolBtn icon="custom" label="Произвольный" disabled={noStudy} onClick={() => st.setDialog({ kind: "flex" })} />
         <ToolBtn icon="columns" label="По столбцам" disabled={noStudy} onClick={() => st.setDialog({ kind: "columnsChart" })} />
       </Group>
@@ -124,7 +130,7 @@ export function Sidebar() {
         <ToolBtn icon="zoomin" label="Приблизить" {...T("zoom")} title="Выделите область рамкой. Двойной клик — масштаб по умолчанию" />
         <ToolBtn icon="zoomout" label="Отдалить" disabled={!activeChartId} onClick={zoomOut} />
         <ToolBtn icon="pan" label="Рука" {...T("pan")} title="Сдвиг графика (также средняя кнопка мыши)" />
-        <ToolBtn icon="reset" label="По умолч." disabled={!activeChartId} onClick={() => { const c = activeChart(); if (c) st.updateChart(c.id, { view: c.defaultView }); }} />
+        <ToolBtn icon="reset" label="По умолч." disabled={!activeChartId} onClick={() => { const c = activeChart(); if (c) st.updateChart(c.id, { view: c.defaultView, view2: undefined }); }} />
         <ToolBtn icon="savedef" label="Сохр. масштаб" disabled={!activeChartId} onClick={() => { const c = activeChart(); if (c) st.updateChart(c.id, { defaultView: c.view ?? autoView(buildChartData(c, useApp.getState().project).series, c.xLog, c.yLog) }); }} />
         <ToolBtn icon="hide" label="Скрыть" disabled={!activeChartId} onClick={() => activeChartId && st.updateChart(activeChartId, { visible: false })} />
       </Group>

@@ -189,8 +189,7 @@ export const useApp = create<AppState>((set, get) => ({
     for (const s of studies) {
       charts.push(newChart("loglog", s.id, { name: `Диагностика ${s.name} (log-log)` }));
       charts.push(newChart("flex", s.id, { name: `Линейный поток: Δp от √t`, timeFn: "sqrt", yFn: "dp" }));
-      charts.push(newChart("history", s.id, { name: "История давления" }));
-      charts.push(newChart("rates", s.id, { name: "История дебитов", visible: false }));
+      charts.push(newChart("combo", s.id, { name: "История: давление и дебит" }));
     }
     const p = get().project;
     const proj: Project = { ...p, studies: [...p.studies, ...studies], charts: [...p.charts, ...charts] };
@@ -209,7 +208,9 @@ export const useApp = create<AppState>((set, get) => ({
             ? { name: `Диагностика ${study.name} (log-log)` }
             : k === "rates"
               ? { name: "История дебитов" }
-              : {},
+              : k === "combo"
+                ? { name: "История: давление и дебит" }
+                : {},
       ),
     );
     set((st) => ({

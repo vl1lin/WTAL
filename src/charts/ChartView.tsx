@@ -37,6 +37,10 @@ export interface ChartViewProps {
   onSelectLine(id: string | null, info: boolean): void;
   onContextMenu(clientX: number, clientY: number): void;
   onActivate(): void;
+  /** Вертикальные пунктирные линии (значения X в данных) — моменты смены режима. */
+  vLines?: number[];
+  /** Не подписывать ось X (верхний график в паре с общей осью времени). */
+  compactX?: boolean;
 }
 
 type Drag =
@@ -184,7 +188,7 @@ export function ChartView(props: ChartViewProps) {
     g.font = "12px Inter, system-ui, sans-serif";
     g.textAlign = "center";
     g.textBaseline = "bottom";
-    g.fillText(data.xLabel, L + frame.pw / 2, size.h - 4);
+    if (!props.compactX) g.fillText(data.xLabel, L + frame.pw / 2, size.h - 4);
     g.save();
     g.translate(13, T + frame.ph / 2);
     g.rotate(-Math.PI / 2);
@@ -263,6 +267,22 @@ export function ChartView(props: ChartViewProps) {
         }
       }
     });
+
+    // моменты смены режима
+    if (props.vLines && props.vLines.length > 0) {
+      g.strokeStyle = chart.theme === "dark" ? "rgba(250,204,21,0.75)" : "rgba(202,138,4,0.8)";
+      g.lineWidth = 1;
+      g.setLineDash([3, 3]);
+      g.beginPath();
+      for (const x of props.vLines) {
+        const sx = Math.round(frame.px(toAxis(x, chart.xLog))) + 0.5;
+        if (!Number.isFinite(sx)) continue;
+        g.moveTo(sx, T);
+        g.lineTo(sx, B);
+      }
+      g.stroke();
+      g.setLineDash([]);
+    }
 
     // прямые
     for (const l of chart.lines) {

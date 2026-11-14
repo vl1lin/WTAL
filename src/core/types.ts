@@ -66,7 +66,8 @@ export type TimeFn = "dt" | "log" | "sqrt" | "qrt" | "invsqrt";
 /** Способ суперпозиции. */
 export type Superposition = "none" | "buildup" | "multirate" | "agarwal";
 
-export type ChartKind = "loglog" | "semilog" | "history" | "rates" | "flex" | "columns";
+/** combo — два графика в одном окне: давление сверху, дебит снизу, общая ось времени. */
+export type ChartKind = "loglog" | "semilog" | "history" | "rates" | "combo" | "flex" | "columns";
 
 /** Вид линии тренда. "axis" — прямая в текущих осях (наклон на log-log = показатель степени). */
 export type FitType = "axis" | "linear" | "power" | "log" | "exp" | "poly";
@@ -137,6 +138,8 @@ export interface ChartDef {
   overlayStudyIds?: string[];
   view?: View;
   defaultView?: View;
+  /** Нижний график (дебит) в виде combo: своя ось Y, ось X общая с view. */
+  view2?: View;
   lines: LineDef[];
   visible: boolean;
   minimized: boolean;

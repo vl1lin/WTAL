@@ -51,7 +51,7 @@ const projectSchema = z.object({
       id: z.string(),
       studyId: z.string(),
       name: z.string(),
-      kind: z.enum(["loglog", "semilog", "history", "rates", "flex", "columns"]),
+      kind: z.enum(["loglog", "semilog", "history", "rates", "combo", "flex", "columns"]),
       xLog: z.boolean(),
       yLog: z.boolean(),
       theme: z.enum(["dark", "light"]),
@@ -69,6 +69,7 @@ const projectSchema = z.object({
       overlayStudyIds: z.array(z.string()).optional(),
       view: viewSchema.optional(),
       defaultView: viewSchema.optional(),
+      view2: viewSchema.optional(),
       lines: z.array(
         z.object({
           id: z.string(),

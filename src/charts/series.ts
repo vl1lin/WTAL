@@ -7,6 +7,7 @@
  *     semilog : функция суперпозиции log — давление
  *     history : время от начала записи — давление
  *     rates   : история дебитов (ступенчатый график) из таблицы дебитов
+ *     combo   : не строится здесь — ChartHost собирает его из history (сверху) и rates (снизу)
  *     flex    : f(Δt) с суперпозицией — P или Δp (опц. нормировка на дебит)
  *     columns : столбец X — столбцы Y (как есть, в единицах столбцов)
  *
@@ -256,4 +257,24 @@ export function buildChartData(chart: ChartDef, project: Project): ChartData {
     xLabel: `${TIME_LABEL[fn]}${supName[chart.superposition] ?? ""}`,
     yLabel: pLabel(useDp, chart.normalizeByRate),
   };
+}
+
+/**
+ * Моменты смены режима (часы в шкале «время от начала записи давления») — для вертикальных линий
+ * на графиках истории. Если давления нет — от первого режима.
+ * @param study исследование
+ * @returns времена изменения дебита, ч
+ */
+export function rateChangeHours(study: Study): number[] {
+  const rt = rateTable(study);
+  if (!rt) return [];
+  const b = baseData(study, sheetOf(study));
+  const rel = b.rates ?? rt.rows.map((r) => ({ t_s: r.tAbs_s - (rt.rows[0]?.tAbs_s ?? 0), q_m3_s: r.q_m3_s }));
+  const out: number[] = [];
+  let prev = Number.NaN;
+  for (const r of rel) {
+    if (!Number.isFinite(prev) || Math.abs(r.q_m3_s - prev) > 1e-12 * Math.max(1, Math.abs(prev))) out.push(r.t_s / 3600);
+    prev = r.q_m3_s;
+  }
+  return out;
 }

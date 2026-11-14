@@ -13,7 +13,7 @@ import type { Column, Quantity, Study, TablePart, TestType } from "../core/types
 import { computeSheet } from "../core/sheet";
 import { dimensionOfQuantity, fromSI, toSI, UNITS } from "../core/units";
 import { colLetter } from "../core/formula";
-import { baseData, producingTime, rateEvents } from "../core/welltest";
+import { baseData, effectiveTestType, producingTime, rateEvents } from "../core/welltest";
 import { sheetOf } from "../charts/series";
 import { fmt } from "../core/regression";
 
@@ -245,7 +245,7 @@ export function StudyDialog({ studyId }: { studyId: string }) {
     if (!study) return null;
     const b = baseData(study, sheetOf(study));
     const ev = rateEvents(study, b);
-    return { b, tp: producingTime(study, ev, b), hasTable: b.rates !== null && b.rates.length > 0 };
+    return { b, tp: producingTime(study, ev, b), hasTable: b.rates !== null && b.rates.length > 0, type: effectiveTestType(study, b) };
   }, [study]);
   if (!study || !s || !info) return null;
   const rateRoleSel = (k: "time" | "rate", label: string) => (
@@ -305,7 +305,8 @@ export function StudyDialog({ studyId }: { studyId: string }) {
         {info.hasTable ? (
           <div className="banner blue small">
             Начало анализируемого периода — последнее изменение дебита: {fmt(info.b.tStart_s / 3600, 6)} ч от начала записи давления.
-            Время работы до него tp = {fmt(info.tp / 3600, 6)} ч.
+            Время работы до него tp = {fmt(info.tp / 3600, 6)} ч. Тип периода по дебитам:{" "}
+            <b>{info.type === "buildup" ? "КВД (дебит снизился)" : "КСД (дебит вырос)"}</b> — поле «Тип» не используется.
           </div>
         ) : (
           <>
