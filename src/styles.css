@@ -96,6 +96,8 @@ kbd { padding: 0 5px; border: 1px solid #94a3b8; border-radius: 3px; background:
 .main-tab > button:first-child { color: #1e3a8a; font-weight: 600; }
 .main-tab { margin-right: 10px; border-right: 1px solid var(--line); }
 .tab-gear { border: 0; background: transparent; color: #64748b; cursor: pointer; padding: 4px 8px 4px 4px; display: flex; }
+.tab-close { border: 0; background: transparent; color: #94a3b8; cursor: pointer; padding: 4px 8px 4px 0; display: flex; }
+.tab-close:hover { color: var(--red); }
 .tab-add { padding: 7px 10px; border: 0; background: transparent; color: var(--blue); font-weight: 600; cursor: pointer; }
 
 /* ---------- панель инструментов ---------- */

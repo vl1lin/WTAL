@@ -71,7 +71,9 @@ export function ImportDialog({ initialPart }: { initialPart: TablePart }) {
   const [header, setHeader] = useState(true);
   const [skip, setSkip] = useState(0);
   const [name, setName] = useState(`Исследование ${studies.filter((s) => !s.isMain).length + 1}`);
-  const [testType, setTestType] = useState<TestType>("buildup");
+  // «—» (пусто) — тип не задан: у нового исследования определяется по дебитам (без них — КВД),
+  // у существующего не меняется.
+  const [testType, setTestType] = useState<TestType | "">("");
   const [maps, setMaps] = useState<ColMap[]>([]);
   const [charts, setCharts] = useState<Record<ChartKind, boolean>>({ loglog: true, history: false, flex: true, semilog: false, rates: false, combo: true, columns: false });
 
@@ -145,7 +147,7 @@ export function ImportDialog({ initialPart }: { initialPart: TablePart }) {
         roles: {},
         rateColumns: part === "q" ? cols : [],
         rateRoles: {},
-        testType,
+        testType: testType || "buildup",
         tpSeconds: 0,
         rateBeforeM3s: 0,
       };
@@ -159,7 +161,7 @@ export function ImportDialog({ initialPart }: { initialPart: TablePart }) {
       if (part === "q" && !has("rates") && !has("combo")) {
         st.addChart(newChart("combo", targetStudy.id, { name: "История: давление и дебит" }));
       }
-      st.updateStudy(targetStudy.id, { testType });
+      if (testType) st.updateStudy(targetStudy.id, { testType });
       st.setActiveStudy(targetStudy.id);
     }
     st.setTablePart(part);
@@ -206,7 +208,8 @@ export function ImportDialog({ initialPart }: { initialPart: TablePart }) {
         {isNew && <label className="row gap small">Название <input className="input" value={name} onChange={(e) => setName(e.target.value)} /></label>}
         <label className="row gap small">
           Тип
-          <select className="input" value={isNew ? testType : (targetStudy?.testType ?? testType)} onChange={(e) => setTestType(e.target.value as TestType)}>
+          <select className="input" value={testType} onChange={(e) => setTestType(e.target.value as TestType | "")}>
+            <option value="">—</option>
             <option value="buildup">КВД (восстановление)</option>
             <option value="drawdown">КСД / падение давления</option>
           </select>

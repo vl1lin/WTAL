@@ -116,6 +116,17 @@ export function TopBar() {
               <button type="button" className="tab-gear" aria-label={`Настройки ${s.name}`} title="Настройки исследования" onClick={() => st.setDialog({ kind: "study", studyId: s.id })}>
                 <Icon name="gear" size={13} />
               </button>
+              <button
+                type="button"
+                className="tab-close"
+                aria-label={`Удалить ${s.name}`}
+                title="Удалить исследование"
+                onClick={() => {
+                  if (confirm(`Удалить исследование «${s.name}» вместе с его графиками и прямыми?`)) st.removeStudy(s.id);
+                }}
+              >
+                <Icon name="close" size={12} />
+              </button>
             </div>
           );
         })}
