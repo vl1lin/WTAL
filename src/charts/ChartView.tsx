@@ -360,10 +360,29 @@ export function ChartView(props: ChartViewProps) {
     g.setLineDash([]);
 
     if (data.warning) {
+      // Подсказка переносится по словам в пределах области построения.
       g.fillStyle = theme.text;
       g.font = "13px Inter, system-ui, sans-serif";
       g.textAlign = "center";
-      g.fillText(data.warning, L + frame.pw / 2, T + frame.ph / 2);
+      g.textBaseline = "middle";
+      const maxW = Math.max(120, frame.pw - 24);
+      const lines: string[] = [];
+      let cur = "";
+      for (const w of data.warning.split(" ")) {
+        const t = cur ? `${cur} ${w}` : w;
+        if (g.measureText(t).width > maxW && cur) {
+          lines.push(cur);
+          cur = w;
+        } else cur = t;
+      }
+      if (cur) lines.push(cur);
+      const lh = 18;
+      const y0 = T + frame.ph / 2 - ((lines.length - 1) * lh) / 2;
+      g.fillStyle = chart.theme === "dark" ? "rgba(15,23,42,0.85)" : "rgba(255,255,255,0.9)";
+      const boxW = Math.min(frame.pw - 8, Math.max(...lines.map((l) => g.measureText(l).width)) + 24);
+      g.fillRect(L + frame.pw / 2 - boxW / 2, y0 - lh, boxW, lines.length * lh + lh);
+      g.fillStyle = theme.text;
+      lines.forEach((l, k) => g.fillText(l, L + frame.pw / 2, y0 + k * lh));
     }
   });
 

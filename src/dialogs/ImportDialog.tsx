@@ -48,7 +48,7 @@ function guess(header: string, sample: string): { quantity: Quantity; unit: stri
     return { quantity: "pressure", unit };
   }
   if (/расх|дебит|rate|^q\b|q\s|м3|m3/.test(h)) return { quantity: "rate", unit: /ч\b|\/h/.test(h) ? "m3/h" : "m3/d" };
-  if (/врем|time|^t\b|t\s|час|^dt/.test(h)) {
+  if (/врем|time|^t\b|t\s|час|^dt|начал|start|, ч\b|,\s*(ч|мин|сут)$/.test(h)) {
     const unit = /мин|min/.test(h) ? "min" : /сут|day/.test(h) ? "d" : /\bс\b|sec/.test(h) ? "s" : "h";
     return { quantity: "time", unit };
   }
@@ -83,15 +83,26 @@ export function ImportDialog({ initialPart }: { initialPart: TablePart }) {
   const [lastKey, setLastKey] = useState("");
   if (parsed && mapKey !== lastKey) {
     setLastKey(mapKey);
-    setMaps(
-      Array.from({ length: nCols }, (_, i) => {
-        const h = parsed.headers?.[i] ?? `Столбец ${i + 1}`;
-        const g = guess(h, parsed.rows[0]?.[i] ?? "");
-        // В таблице дебитов давление не нужно.
-        const use = !(part === "q" && g.quantity === "pressure");
-        return { name: h, ...g, use };
-      }),
-    );
+    const guessed = Array.from({ length: nCols }, (_, i) => {
+      const h = parsed.headers?.[i] ?? `Столбец ${i + 1}`;
+      const g = guess(h, parsed.rows[0]?.[i] ?? "");
+      // В таблице дебитов давление не нужно.
+      const use = !(part === "q" && g.quantity === "pressure");
+      return { name: h, ...g, use };
+    });
+    // Таблица дебитов: если время не распознано — первый столбец, который не дебит, считаем временем начала режима.
+    if (part === "q" && !guessed.some((m) => m.quantity === "time" || m.quantity === "datetime")) {
+      const k = guessed.findIndex((m) => m.quantity !== "rate");
+      const m = guessed[k];
+      if (m) guessed[k] = { ...m, quantity: "time", unit: "h", use: true };
+    }
+    // …и если дебит не распознан — первый столбец после времени.
+    if (part === "q" && !guessed.some((m) => m.quantity === "rate")) {
+      const k = guessed.findIndex((m) => m.quantity !== "time" && m.quantity !== "datetime");
+      const m = guessed[k];
+      if (m) guessed[k] = { ...m, quantity: "rate", unit: "m3/d", use: true };
+    }
+    setMaps(guessed);
   }
 
   const readFile = (f: File): void => {

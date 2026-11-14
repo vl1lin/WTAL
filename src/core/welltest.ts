@@ -5,7 +5,8 @@
  *   таблица дебитов ──rateTable()──► режимы (абсолютное время начала, дебит)
  *   таблица давления + режимы ──baseData()──► BaseData (СИ)
  *        tStart_s — начало анализируемого периода = последнее изменение дебита
- *                   (если таблицы дебитов нет — первая строка давления)
+ *                   (не позже первой из выбранных строк, если они заданы;
+ *                    если таблицы дебитов нет — первая строка давления)
  *        dt_s     — время от начала периода (Δt), hist_s — время от первой строки давления
  *   ├─ effectiveTestType()              — КВД/КСД по направлению последнего изменения дебита
  *   ├─ deltaP()                         — Δp от давления p0 в момент tStart (КВД: p − p0, КСД: p0 − p), Па
@@ -101,9 +102,12 @@ export interface BaseData {
  * Строки без времени или давления пропускаются.
  * @param study исследование
  * @param sheet вычисленная таблица давления
+ * @param periodRows строки, по которым выбирается период (график по выделенным точкам):
+ *   период начинается с последнего изменения дебита не позже первой из этих строк.
+ *   Без них — с последнего изменения дебита во всей записи.
  * @returns ряды по строкам, начало периода, давление p0 и режимы
  */
-export function baseData(study: Study, sheet: Sheet): BaseData {
+export function baseData(study: Study, sheet: Sheet, periodRows?: number[]): BaseData {
   const out: BaseData = { rows: [], dt_s: [], hist_s: [], p_Pa: [], q_m3_s: [], tStart_s: 0, p0_Pa: Number.NaN, rates: null };
   const tCol = study.columns.find((c) => c.id === study.roles.time);
   const pCol = study.columns.find((c) => c.id === study.roles.pressure);
@@ -139,8 +143,17 @@ export function baseData(study: Study, sheet: Sheet): BaseData {
     }
   }
 
-  // Начало периода — последнее изменение дебита не позже последней точки давления.
-  const lastHist = out.hist_s[out.hist_s.length - 1] ?? 0;
+  // Начало периода — последнее изменение дебита не позже последней точки давления
+  // (или не позже первой из выбранных строк).
+  let lastHist = out.hist_s[out.hist_s.length - 1] ?? 0;
+  if (periodRows && periodRows.length > 0) {
+    const sel = new Set(periodRows);
+    let first = Number.POSITIVE_INFINITY;
+    out.rows.forEach((r, i) => {
+      if (sel.has(r)) first = Math.min(first, out.hist_s[i] ?? Number.POSITIVE_INFINITY);
+    });
+    if (Number.isFinite(first)) lastHist = first;
+  }
   if (out.rates && out.rates.length > 0) {
     let start = Number.NaN;
     let prevQ = Number.NaN;

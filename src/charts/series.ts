@@ -105,7 +105,7 @@ function pressureOut(dp_Pa: number, dq_m3_s: number): number {
  */
 function loglogSeries(chart: ChartDef, study: Study, colors: [string, string], suffix: string): Series[] {
   const sheet = sheetOf(study);
-  const b = baseData(study, sheet);
+  const b = baseData(study, sheet, chart.studyId === study.id ? chart.rows : undefined);
   const dp = deltaP(study, b);
   const ev = rateEvents(study, b);
   const tp = producingTime(study, ev, b);
@@ -165,7 +165,7 @@ export function buildChartData(chart: ChartDef, project: Project): ChartData {
  * @returns текст подсказки
  */
 function diagnoseEmpty(chart: ChartDef, study: Study): string {
-  const b = baseData(study, sheetOf(study));
+  const b = baseData(study, sheetOf(study), chart.rows);
   const allowed = chart.rows ? new Set(chart.rows) : null;
   const idx = b.rows.map((r, i) => (allowed && !allowed.has(r) ? -1 : i)).filter((i) => i >= 0);
   if (idx.length === 0) return "В выбранных строках нет времени и давления";
@@ -222,7 +222,8 @@ function buildChartDataRaw(chart: ChartDef, project: Project): ChartData {
     };
   }
 
-  const b = baseData(study, sheet);
+  // Для графика по выделенным точкам период выбирается по этим точкам.
+  const b = baseData(study, sheet, chart.rows);
 
   if (chart.kind === "rates") {
     // Ступенчатый график режимов; шкала времени — от первой строки давления (или первого режима).

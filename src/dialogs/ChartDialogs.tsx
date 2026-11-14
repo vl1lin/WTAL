@@ -14,13 +14,13 @@ import { useApp } from "../store";
 import { Modal, NumInput } from "./common";
 import type { ChartDef, FitType, Marker, Superposition, TimeFn } from "../core/types";
 import { newChart, uid } from "../core/factory";
-import { buildChartData, COLORS } from "../charts/series";
+import { buildChartData, COLORS, sheetOf } from "../charts/series";
 import { ChartView } from "../charts/ChartView";
 import { makeTrend, lineStats } from "../charts/trend";
 import { fmt, FIT_LABELS } from "../core/regression";
 import { autoView, fromAxis, toAxis } from "../charts/geometry";
-import { toSI } from "../core/units";
-import { representativeRate } from "../core/welltest";
+import { fromSI, toSI } from "../core/units";
+import { baseData, effectiveTestType, rateEvents, representativeRate } from "../core/welltest";
 
 /** Графики истории не имеют параметров функции времени/давления. */
 const isHistoryKind = (k: ChartDef["kind"]): boolean => k === "history" || k === "rates" || k === "combo";
@@ -188,6 +188,17 @@ export function FlexDialog({ rows }: { rows?: number[] }) {
     return typeof r === "string" ? null : r;
   }, [withTrend, c, data]);
   const slope = trend?.trend?.coeffs[0];
+  // Описание периода: от какого изменения дебита отсчитывается Δt.
+  const period = useMemo(() => {
+    if (!study) return null;
+    const b = baseData(study, sheetOf(study), c.rows);
+    if (!b.rates || b.rates.length === 0) return null;
+    const ev = rateEvents(study, b);
+    const q = (i: number): string => fmt(fromSI(ev[i]?.q_m3_s ?? Number.NaN, "rate", "m3/d"), 4);
+    const n = ev.length;
+    const type = effectiveTestType(study, b) === "buildup" ? "КВД" : "КСД";
+    return `Период (${type}): Δt отсчитывается от ${fmt(b.tStart_s / 3600, 6)} ч от начала записи — смена дебита ${n > 1 ? q(n - 2) : "0"} → ${q(n - 1)} м³/сут`;
+  }, [study, c.rows]);
   const sqrtLinear = c.kind === "flex" && c.timeFn === "sqrt" && !c.xLog && !c.yLog && !c.normalizeByRate;
 
   const create = (): void => {
@@ -222,6 +233,7 @@ export function FlexDialog({ rows }: { rows?: number[] }) {
           {c.rows
             ? `Источник: ${study?.name}, выделено строк: ${c.rows.length} (номера ${Math.min(...c.rows) + 1}–${Math.max(...c.rows) + 1})`
             : "Строки не выделены — график будет построен по всем данным. Выделите строки в таблице или на графике."}
+          {period && <div className="small">{period}</div>}
         </div>
       )}
       <div className="flex-dialog">
