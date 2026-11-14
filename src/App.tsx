@@ -12,6 +12,7 @@
  */
 import { useRef, useState } from "react";
 import { useApp } from "./store";
+import { useCursor } from "./charts/cursor";
 import { TopBar } from "./ui/TopBar";
 import { Sidebar } from "./ui/Sidebar";
 import { DataTable } from "./table/DataTable";
@@ -33,6 +34,16 @@ const TOOL_NAMES: Record<string, string> = {
   info: "Информация о прямой — клик по прямой",
   editline: "Изменить прямую — тянуть узел/линию; Ctrl — по горизонтали, Shift — по вертикали",
 };
+
+/** Координаты курсора над графиком (вместо подписи на самом графике). */
+function StatusCursor() {
+  const c = useCursor((s) => s.cursor);
+  return (
+    <span className="status-cursor mono" aria-live="off">
+      {c ? `${c.xLabel} = ${c.x}   ${c.yLabel} = ${c.y}` : ""}
+    </span>
+  );
+}
 
 function Dialogs() {
   const d = useApp((s) => s.dialog);
@@ -139,6 +150,7 @@ export function App() {
           </span>
         )}
         <span className="grow" />
+        <StatusCursor />
         <span>Колесо — масштаб · средняя кнопка — сдвиг · ПКМ по графику — параметры</span>
       </footer>
       <Dialogs />

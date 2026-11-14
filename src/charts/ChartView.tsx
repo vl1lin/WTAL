@@ -22,6 +22,7 @@ import type { ChartData, Series } from "./series";
 import { autoView, clipLine, distToSegment, Frame, fromAxis, lastFrames, MARGIN, pointInPolygon, ticks, toAxis, fmtTick } from "./geometry";
 import { evalTrend, type TrendFit } from "../core/regression";
 import { uid } from "../core/factory";
+import { useCursor } from "./cursor";
 
 export interface ChartViewProps {
   chart: ChartDef;
@@ -54,6 +55,12 @@ const THEMES = {
   dark: { bg: "#0B1016", grid: "#243041", minor: "#151D28", axis: "#64748B", text: "#CBD5E1", sel: "#FACC15" },
   light: { bg: "#FFFFFF", grid: "#E2E8F0", minor: "#F1F5F9", axis: "#64748B", text: "#334155", sel: "#CA8A04" },
 };
+
+/** Значение с единицей из подписи оси («Δt, ч» → «12 ч»). */
+function withUnit(v: string, label: string): string {
+  const i = label.indexOf(",");
+  return i >= 0 ? `${v} ${label.slice(i + 1).trim()}` : v;
+}
 
 /** Тренд из описания прямой (для отрисовки и проверки попадания). */
 export function lineTrend(l: LineDef, chart: ChartDef): TrendFit | null {
@@ -352,19 +359,6 @@ export function ChartView(props: ChartViewProps) {
     }
     g.setLineDash([]);
 
-    // координаты курсора
-    if (h && frame.inside(h.sx, h.sy)) {
-      const a = frame.toAxisPoint(h.sx, h.sy);
-      const txt = `x = ${fmtTick(fromAxis(a.x, chart.xLog))}   y = ${fmtTick(fromAxis(a.y, chart.yLog))}`;
-      g.font = "11px JetBrains Mono, ui-monospace, monospace";
-      const w = g.measureText(txt).width + 12;
-      g.fillStyle = chart.theme === "dark" ? "rgba(15,23,42,0.85)" : "rgba(255,255,255,0.9)";
-      g.fillRect(R - w - 4, T + 4, w, 18);
-      g.fillStyle = theme.text;
-      g.textAlign = "left";
-      g.textBaseline = "middle";
-      g.fillText(txt, R - w + 2, T + 13);
-    }
     if (data.warning) {
       g.fillStyle = theme.text;
       g.font = "13px Inter, system-ui, sans-serif";
@@ -497,6 +491,16 @@ export function ChartView(props: ChartViewProps) {
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>): void => {
     const { sx, sy } = local(e);
     hover.current = { sx, sy };
+    if (frame.inside(sx, sy)) {
+      const a = frame.toAxisPoint(sx, sy);
+      useCursor.getState().set({
+        chartName: chart.name,
+        x: withUnit(fmtTick(fromAxis(a.x, chart.xLog)), data.xLabel),
+        y: withUnit(fmtTick(fromAxis(a.y, chart.yLog)), data.yLabel),
+        xLabel: data.xLabel.split(",")[0]?.trim() || "x",
+        yLabel: data.yLabel.split(",")[0]?.trim() || "y",
+      });
+    } else useCursor.getState().set(null);
     const d = drag.current;
     if (!d) {
       redraw();
@@ -608,6 +612,7 @@ export function ChartView(props: ChartViewProps) {
         onPointerUp={onPointerUp}
         onPointerLeave={() => {
           hover.current = null;
+          useCursor.getState().set(null);
           redraw();
         }}
         onDoubleClick={() => {
