@@ -2,12 +2,12 @@
  * Левая панель инструментов с раскрывающимися группами.
  *
  * Схема групп:
- *   Графики  — Log-log, Semilog, История давления, История дебитов, Давление + дебит, Произвольный (диалог), По столбцам (диалог)
- *   Данные   — выделение прямоугольником / лассо / кликом, «Множество точек», снять выделение,
- *              график по выделенным точкам
+ *   Графики  — Log-log, Semilog, История давления, История дебитов, Давление + дебит, Произвольный (диалог),
+ *              По столбцам (диалог), По выделенному (диалог по выделенным строкам)
+ *   Данные   — выделение прямоугольником / лассо / кликом, «Множество точек», снять выделение
  *   Прямые   — по 2 точкам, тренд (диалог), выбрать, инфо, изменить, удалить
  *   График   — параметры/оси, приблизить (рамкой), отдалить, по умолчанию, сохранить масштаб, рука, скрыть
- *   Таблица  — пустой столбец, ƒx-столбец, построить по выделенному
+ *   Таблица  — пустой столбец, ƒx-столбец
  */
 import { useState } from "react";
 import { useApp, type Tool } from "../store";
@@ -58,7 +58,6 @@ export function Sidebar() {
   const activeChartId = useApp((s) => s.activeChartId);
   const selectedLine = useApp((s) => s.selectedLine);
   const view = useApp((s) => s.view);
-  const selCount = useApp((s) => (s.activeStudyId ? (s.selection[s.activeStudyId]?.length ?? 0) : 0));
   const st = useApp.getState();
   const T = (t: Tool) => ({ active: tool === t, onClick: () => st.setTool(t) });
   const noStudy = !studyId;
@@ -99,6 +98,13 @@ export function Sidebar() {
         <ToolBtn icon="combo" label="Давл. + дебит" disabled={noStudy} onClick={() => add("combo")} title="Давление сверху, дебит снизу, общая ось времени" />
         <ToolBtn icon="custom" label="Произвольный" disabled={noStudy} onClick={() => st.setDialog({ kind: "flex" })} />
         <ToolBtn icon="columns" label="По столбцам" disabled={noStudy} onClick={() => st.setDialog({ kind: "columnsChart" })} />
+        <ToolBtn
+          icon="plotsel"
+          label="По выделенному"
+          disabled={noStudy}
+          title="Пользовательский график по выделенным точкам (например, давление от √t)"
+          onClick={() => studyId && st.setDialog({ kind: "flex", rows: useApp.getState().selection[studyId] ?? [] })}
+        />
       </Group>
       <Group
         title="Данные"
@@ -111,14 +117,7 @@ export function Sidebar() {
         <ToolBtn icon="rect" label="Прямоуг." {...T("rect")} title="Выделение прямоугольником" />
         <ToolBtn icon="lasso" label="Лассо" {...T("lasso")} />
         <ToolBtn icon="click" label="По точкам" {...T("click")} title="Выделение кликом (Shift — добавить)" />
-        <ToolBtn icon="clearsel" label="Снять" disabled={noStudy || selCount === 0} onClick={() => studyId && st.setSelection(studyId, [])} title="Снять выделение" />
-        <ToolBtn
-          icon="plotsel"
-          label="График по выделен."
-          disabled={noStudy || selCount === 0}
-          title="Построить график по выделенным точкам (например, давление от √t)"
-          onClick={() => studyId && st.setDialog({ kind: "flex", rows: useApp.getState().selection[studyId] ?? [] })}
-        />
+        <ToolBtn icon="clearsel" label="Снять" disabled={noStudy} onClick={() => studyId && st.setSelection(studyId, [])} title="Снять выделение" />
       </Group>
       <Group title="Прямые">
         <ToolBtn icon="line2" label="По 2 точкам" {...T("line2")} title="Прямая по двум кликам" />
@@ -146,13 +145,6 @@ export function Sidebar() {
       <Group title="Таблица">
         <ToolBtn icon="addcol" label="Пустой столбец" disabled={noStudy} onClick={() => studyId && st.addColumn(studyId, {}, undefined, useApp.getState().tablePart)} />
         <ToolBtn icon="fx" label="Столбец ƒx" disabled={noStudy} onClick={() => st.setDialog({ kind: "newColumn", formula: true })} />
-        <ToolBtn
-          icon="plotsel"
-          label="По выделенному"
-          disabled={noStudy}
-          title="Пользовательский график по выделенным строкам"
-          onClick={() => studyId && st.setDialog({ kind: "flex", rows: useApp.getState().selection[studyId] ?? [] })}
-        />
       </Group>
     </nav>
   );

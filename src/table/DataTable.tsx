@@ -363,11 +363,7 @@ export function DataTable({ study, part }: { study: Study; part: TablePart }) {
             Выделено: {selected.size} ✕
           </button>
         )}
-        {isP && selected.size > 0 && (
-          <button type="button" className="btn primary small" onClick={() => st.setDialog({ kind: "flex", rows: [...selected] })}>
-            График по выделенному
-          </button>
-        )}
+
         <span className="grow" />
         {sort && (
           <button type="button" className="btn small" onClick={() => setSort(null)}>

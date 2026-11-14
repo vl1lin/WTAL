@@ -222,11 +222,6 @@ function ChartContextMenu(props: { chart: ChartDef; x: number; y: number; onClos
       {item("Сохранить масштаб как по умолчанию", () => st.updateChart(chart.id, { defaultView: chart.view ?? props.autoV() }))}
       {item("Сбросить сохранённый масштаб", () => st.updateChart(chart.id, { defaultView: undefined, view: undefined, view2: undefined }))}
       <hr />
-      {item("Построить график по выделенным точкам…", () => {
-        const s = useApp.getState();
-        if (s.activeStudyId !== chart.studyId) s.setActiveStudy(chart.studyId);
-        st.setDialog({ kind: "flex", rows: s.selection[chart.studyId] ?? [] });
-      })}
       {item("Линия тренда по выделенным…", () => st.setDialog({ kind: "trend", chartId: chart.id }))}
       {item("Экспорт PNG", () => exportPng(chart))}
       {item("Скрыть график", () => st.updateChart(chart.id, { visible: false }))}

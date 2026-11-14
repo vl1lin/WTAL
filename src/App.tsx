@@ -134,21 +134,7 @@ export function App() {
       </div>
       <footer className="statusbar">
         {view !== "calc" && <span>Инструмент: <b>{TOOL_NAMES[tool]}</b></span>}
-        {sel > 0 && (
-          <span>
-            Выделено строк: <b>{sel}</b> —{" "}
-            <button
-              type="button"
-              className="link-btn"
-              onClick={() => {
-                const s = useApp.getState();
-                if (s.activeStudyId) s.setDialog({ kind: "flex", rows: s.selection[s.activeStudyId] ?? [] });
-              }}
-            >
-              построить график по выделенному
-            </button>
-          </span>
-        )}
+        {sel > 0 && <span>Выделено строк: <b>{sel}</b></span>}
         <span className="grow" />
         <StatusCursor />
         <span>Колесо — масштаб · средняя кнопка — сдвиг · ПКМ по графику — параметры</span>
