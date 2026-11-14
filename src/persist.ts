@@ -9,7 +9,7 @@
  */
 import { z } from "zod";
 import type { Project } from "./core/types";
-import { defaultCalc, emptyProject } from "./core/factory";
+import { defaultCalc, emptyProject, ensureMain } from "./core/factory";
 
 const KEY = "wtal.project";
 
@@ -41,6 +41,8 @@ const projectSchema = z.object({
       roles: z.object({ time: z.string().optional(), pressure: z.string().optional(), rate: z.string().optional() }),
       rateColumns: z.array(columnSchema).default([]),
       rateRoles: z.object({ time: z.string().optional(), rate: z.string().optional() }).default({}),
+      rateTimeMode: z.enum(["start", "end"]).optional(),
+      isMain: z.boolean().optional(),
       testType: z.enum(["buildup", "drawdown"]),
       tpSeconds: z.number(),
       rateBeforeM3s: z.number(),
@@ -136,7 +138,7 @@ export function loadProject(): Project {
     const raw = localStorage.getItem(KEY);
     if (!raw) return emptyProject();
     const p = validateProject(JSON.parse(raw));
-    return { ...p, calc: { ...defaultCalc(), ...p.calc } };
+    return ensureMain({ ...p, calc: { ...defaultCalc(), ...p.calc } });
   } catch {
     return emptyProject();
   }
@@ -180,5 +182,5 @@ export function exportProjectFile(p: Project): void {
  */
 export function importProjectFile(text: string): Project {
   const p = validateProject(JSON.parse(text));
-  return { ...p, calc: { ...defaultCalc(), ...p.calc } };
+  return ensureMain({ ...p, calc: { ...defaultCalc(), ...p.calc } });
 }

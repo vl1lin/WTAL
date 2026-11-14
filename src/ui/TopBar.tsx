@@ -93,6 +93,18 @@ export function TopBar() {
       <div role="tablist" aria-label="Исследования" className="study-tabs">
         {studies.map((s) => {
           const on = s.id === active && view !== "calc";
+          if (s.isMain)
+            return (
+              <div key={s.id} className={`study-tab main-tab${on ? " on" : ""}`}>
+                <button type="button" role="tab" aria-selected={on} onClick={() => { st.setActiveStudy(s.id); if (view !== "split") st.setView("split"); }}>
+                  <Icon name="home" size={14} />
+                  Главная страница
+                </button>
+                <button type="button" className="tab-gear" aria-label="Настройки главной страницы" title="Столбцы и режим времени дебитов" onClick={() => st.setDialog({ kind: "study", studyId: s.id })}>
+                  <Icon name="gear" size={13} />
+                </button>
+              </div>
+            );
           return (
             <div key={s.id} className={`study-tab${on ? " on" : ""}`}>
               <button type="button" role="tab" aria-selected={on} onClick={() => { st.setActiveStudy(s.id); if (view === "calc") st.setView("split"); }}>
@@ -107,7 +119,7 @@ export function TopBar() {
             </div>
           );
         })}
-        <button type="button" className="tab-add" onClick={() => st.setDialog({ kind: "import" })}>
+        <button type="button" className="tab-add" title="Создать исследование из выделенного на главной странице" onClick={() => st.setDialog({ kind: "createStudy" })}>
           + Новое
         </button>
       </div>

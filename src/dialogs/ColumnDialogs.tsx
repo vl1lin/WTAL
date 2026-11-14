@@ -274,10 +274,12 @@ export function StudyDialog({ studyId }: { studyId: string }) {
       onClose={() => st.setDialog(null)}
       footer={
         <>
-          <button type="button" className="btn danger" onClick={() => { if (confirm(`Удалить исследование «${study.name}» вместе с его графиками?`)) { st.removeStudy(study.id); st.setDialog(null); } }}>Удалить исследование</button>
+          {!study.isMain && (
+            <button type="button" className="btn danger" onClick={() => { if (confirm(`Удалить исследование «${study.name}» вместе с его графиками?`)) { st.removeStudy(study.id); st.setDialog(null); } }}>Удалить исследование</button>
+          )}
           <span className="grow" />
           <button type="button" className="btn" onClick={() => st.setDialog(null)}>Отмена</button>
-          <button type="button" className="btn primary" onClick={() => { st.updateStudy(study.id, { name: s.name, testType: s.testType, tpSeconds: s.tpSeconds, rateBeforeM3s: s.rateBeforeM3s, roles: s.roles, rateRoles: s.rateRoles }); st.setDialog(null); }}>Сохранить</button>
+          <button type="button" className="btn primary" onClick={() => { st.updateStudy(study.id, { name: s.name, testType: s.testType, tpSeconds: s.tpSeconds, rateBeforeM3s: s.rateBeforeM3s, roles: s.roles, rateRoles: s.rateRoles, rateTimeMode: s.rateTimeMode }); st.setDialog(null); }}>Сохранить</button>
         </>
       }
     >
@@ -302,6 +304,13 @@ export function StudyDialog({ studyId }: { studyId: string }) {
           {rateRoleSel("time", "Время начала режима")}
           {rateRoleSel("rate", "Дебит")}
         </div>
+        <label className="lbl">
+          Время в таблице дебитов
+          <select className="input" value={s.rateTimeMode ?? "start"} onChange={(e) => setS({ ...s, rateTimeMode: e.target.value === "end" ? "end" : "start" })}>
+            <option value="start">начало режима</option>
+            <option value="end">конец режима (как в выгрузках Saphir)</option>
+          </select>
+        </label>
         {info.hasTable ? (
           <div className="banner blue small">
             Начало анализируемого периода — последнее изменение дебита: {fmt(info.b.tStart_s / 3600, 6)} ч от начала записи давления.

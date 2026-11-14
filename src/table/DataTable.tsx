@@ -311,6 +311,32 @@ export function DataTable({ study, part }: { study: Study; part: TablePart }) {
   const rowsShown: number[] = [];
   for (let d = first; d <= last; d++) rowsShown.push(d);
 
+  if (isP && nCols === 0) {
+    return (
+      <div className="table-panel">
+        <div className="table-toolbar">
+          <div role="tablist" aria-label="Таблица" className="seg small-seg">
+            <button type="button" role="tab" aria-selected className="on">Давление</button>
+            <button type="button" role="tab" aria-selected={false} onClick={() => st.setTablePart("q")}>Дебиты</button>
+          </div>
+        </div>
+        <div className="empty-table">
+          <b>{study.isMain ? "Загрузите историю скважины" : "Таблица давления пуста"}</b>
+          <p className="muted small">
+            {study.isMain
+              ? "Сюда загружается вся запись давления и история дебитов. На графике «давление + дебит» выделите нужный участок и создайте из него исследование («Данные» → «Создать исследование»)."
+              : "Вставьте данные давления: время и давление."}
+          </p>
+          <button type="button" className="btn primary" onClick={() => st.setDialog({ kind: "import", part: "p" })}>Загрузить давление</button>
+          <button type="button" className="btn" onClick={() => st.setDialog({ kind: "import", part: "q" })}>Загрузить дебиты</button>
+          {study.isMain && (
+            <button type="button" className="btn" onClick={() => st.loadDemo()}>Открыть демо-историю</button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (!isP && nCols === 0) {
     return (
       <div className="table-panel">
@@ -357,7 +383,22 @@ export function DataTable({ study, part }: { study: Study; part: TablePart }) {
             Дебиты{study.rateColumns.length > 0 ? ` (${rateRowCount(study)})` : ""}
           </button>
         </div>
-        <span className="muted small">{isP ? `${sheet.rowCount} строк` : "время = начало режима"}</span>
+        {isP ? (
+          <span className="muted small">{sheet.rowCount} строк</span>
+        ) : (
+          <label className="small muted">
+            время ={" "}
+            <select
+              className="input small"
+              aria-label="Что означает время в таблице дебитов"
+              value={study.rateTimeMode ?? "start"}
+              onChange={(e) => st.updateStudy(study.id, { rateTimeMode: e.target.value === "end" ? "end" : "start" })}
+            >
+              <option value="start">начало режима</option>
+              <option value="end">конец режима (Saphir)</option>
+            </select>
+          </label>
+        )}
         {selected.size > 0 && (
           <button type="button" className="badge yellow" title="Снять выделение" onClick={() => st.setSelection(selKey, [])}>
             Выделено: {selected.size} ✕

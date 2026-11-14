@@ -93,6 +93,8 @@ kbd { padding: 0 5px; border: 1px solid #94a3b8; border-radius: 3px; background:
 .study-tab.on { background: #fff; border-color: var(--line); border-bottom-color: #fff; }
 .study-tab > button:first-child { display: flex; align-items: center; gap: 6px; padding: 7px 4px 7px 12px; border: 0; background: transparent; cursor: pointer; color: var(--muted); }
 .study-tab.on > button:first-child { color: var(--text); font-weight: 600; }
+.main-tab > button:first-child { color: #1e3a8a; font-weight: 600; }
+.main-tab { margin-right: 10px; border-right: 1px solid var(--line); }
 .tab-gear { border: 0; background: transparent; color: #64748b; cursor: pointer; padding: 4px 8px 4px 4px; display: flex; }
 .tab-add { padding: 7px 10px; border: 0; background: transparent; color: var(--blue); font-weight: 600; cursor: pointer; }
 
@@ -255,6 +257,7 @@ select.unit { min-width: 84px; max-width: 130px; flex: 0 0 auto; }
 .calc-table .left { text-align: left; }
 .calc-table tr.off td { opacity: 0.45; }
 .calc-table tr.group-row td { background: #eff6ff; font-weight: 600; }
+.calc-out { display: block; background: #f1f5f9; border-color: var(--line); }
 .th-u { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 .calc-table td .input.num { min-width: 90px; }
 

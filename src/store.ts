@@ -12,7 +12,10 @@
  */
 import { create } from "zustand";
 import type { CalcState, ChartDef, Column, LineDef, Project, Study, TablePart } from "./core/types";
-import { autoRoles, demoStudy, emptyProject, newChart, uid } from "./core/factory";
+import { autoRoles, emptyProject, ensureMain, newChart, uid } from "./core/factory";
+import { demoHistory, studyFromSelection } from "./core/extract";
+import { baseData } from "./core/welltest";
+import { computeSheet } from "./core/sheet";
 import { loadProject, saveProjectDebounced } from "./persist";
 
 export type Tool = "pan" | "zoom" | "rect" | "lasso" | "click" | "line2" | "pickline" | "info" | "editline";
@@ -27,6 +30,7 @@ export type Dialog =
   | { kind: "chartSettings"; chartId: string }
   | { kind: "trend"; chartId: string }
   | { kind: "study"; studyId: string }
+  | { kind: "createStudy" }
   | null;
 
 interface AppState {
@@ -180,20 +184,38 @@ export const useApp = create<AppState>((set, get) => ({
   setActiveChart: (id) => set({ activeChartId: id }),
   setChartsFilter: (chartsFilter) => set({ chartsFilter }),
 
-  replaceProject: (p) =>
-    set({ project: p, activeStudyId: p.studies[0]?.id ?? null, selection: {}, selectedLine: null, activeChartId: null }),
+  replaceProject: (p) => {
+    const proj = ensureMain(p);
+    set({ project: proj, activeStudyId: proj.studies[0]?.id ?? null, selection: {}, selectedLine: null, activeChartId: null });
+  },
 
   loadDemo: () => {
-    const studies = [demoStudy("КВД_1", 1.3, 0.6), demoStudy("КВД_2"), demoStudy("КСД_1", 0.7, 1.8, "drawdown")].map(autoRoles);
+    // Главная страница: синтетическая история скважины (если пуста); исследования — участки из неё.
+    let p = ensureMain(get().project);
+    let main = p.studies.find((s) => s.isMain);
+    if (!main) return;
+    if (main.columns.length === 0) {
+      const h = demoHistory();
+      main = autoRoles({ ...main, columns: h.pressure, rateColumns: h.rates, roles: {}, rateRoles: {} });
+      const m = main;
+      p = { ...p, studies: p.studies.map((s) => (s.isMain ? m : s)) };
+    }
+    const b = baseData(main, computeSheet(main));
+    const rowsBetween = (h0: number, h1: number): number[] =>
+      b.rows.filter((_, i) => (b.hist_s[i] ?? 0) >= h0 * 3600 && (b.hist_s[i] ?? 0) < h1 * 3600);
+    const studies = [
+      studyFromSelection(main, rowsBetween(200, 260), "КВД_1"),
+      studyFromSelection(main, rowsBetween(260, 420), "КСД_1"),
+      studyFromSelection(main, rowsBetween(420, 470), "КВД_2"),
+    ];
     const charts: ChartDef[] = [];
     for (const s of studies) {
       charts.push(newChart("loglog", s.id, { name: `Диагностика ${s.name} (log-log)` }));
       charts.push(newChart("flex", s.id, { name: `Линейный поток: Δp от √t`, timeFn: "sqrt", yFn: "dp" }));
       charts.push(newChart("combo", s.id, { name: "История: давление и дебит" }));
     }
-    const p = get().project;
     const proj: Project = { ...p, studies: [...p.studies, ...studies], charts: [...p.charts, ...charts] };
-    set({ project: proj, activeStudyId: studies[0]?.id ?? null, view: "split" });
+    set({ project: proj, activeStudyId: main.id, view: "split", tablePart: "p" });
   },
 
   addStudy: (s, kinds) => {
@@ -222,6 +244,7 @@ export const useApp = create<AppState>((set, get) => ({
   updateStudy: (id, patch) => set((st) => ({ project: mapStudy(st.project, id, (s) => ({ ...s, ...patch })) })),
   removeStudy: (id) =>
     set((st) => {
+      if (st.project.studies.find((s) => s.id === id)?.isMain) return {};
       const studies = st.project.studies.filter((s) => s.id !== id);
       return {
         project: {

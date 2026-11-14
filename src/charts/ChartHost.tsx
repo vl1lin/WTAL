@@ -400,7 +400,7 @@ export function ChartGrid() {
   const project = useApp((s) => s.project);
   const filter = useApp((s) => s.chartsFilter);
   const st = useApp.getState();
-  const ids = filter ?? project.studies.map((s) => s.id);
+  const ids = filter ?? project.studies.filter((s) => !s.isMain).map((s) => s.id);
   const charts = project.charts.filter((c) => ids.includes(c.studyId) && c.visible);
   const max = charts.find((c) => c.maximized);
   const shown = max ? [max] : charts;
@@ -418,7 +418,7 @@ export function ChartGrid() {
                 checked={on}
                 onChange={() => st.setChartsFilter(on ? ids.filter((x) => x !== s.id) : [...ids, s.id])}
               />
-              {s.name}
+              {s.isMain ? "Главная страница" : s.name}
             </label>
           );
         })}

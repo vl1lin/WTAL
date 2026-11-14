@@ -62,13 +62,15 @@ export function ImportDialog({ initialPart }: { initialPart: TablePart }) {
   const activeId = useApp((s) => s.activeStudyId);
   const [part, setPart] = useState<TablePart>(initialPart);
   // Давление по умолчанию — в новое исследование, дебиты — в активное.
-  const [target, setTarget] = useState<string>(initialPart === "q" && activeId ? activeId : "new");
+  const activeIsMain = studies.find((s) => s.id === activeId)?.isMain ?? false;
+  // На главной странице данные по умолчанию загружаются в неё же.
+  const [target, setTarget] = useState<string>((initialPart === "q" || activeIsMain) && activeId ? activeId : "new");
   const [src, setSrc] = useState<"paste" | "file" | "manual">("paste");
   const [text, setText] = useState("");
   const [delim, setDelim] = useState("auto");
   const [header, setHeader] = useState(true);
   const [skip, setSkip] = useState(0);
-  const [name, setName] = useState(`Исследование ${studies.length + 1}`);
+  const [name, setName] = useState(`Исследование ${studies.filter((s) => !s.isMain).length + 1}`);
   const [testType, setTestType] = useState<TestType>("buildup");
   const [maps, setMaps] = useState<ColMap[]>([]);
   const [charts, setCharts] = useState<Record<ChartKind, boolean>>({ loglog: true, history: false, flex: true, semilog: false, rates: false, combo: true, columns: false });
@@ -196,7 +198,7 @@ export function ImportDialog({ initialPart }: { initialPart: TablePart }) {
             <option value="new">Новое исследование</option>
             {studies.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name} — {part === "q" ? (tableHasData(s.rateColumns) ? "заменить дебиты" : "добавить дебиты") : tableHasData(s.columns) ? "заменить давление" : "добавить давление"}
+                {s.isMain ? "Главная страница (история скважины)" : s.name} — {part === "q" ? (tableHasData(s.rateColumns) ? "заменить дебиты" : "добавить дебиты") : tableHasData(s.columns) ? "заменить давление" : "добавить давление"}
               </option>
             ))}
           </select>

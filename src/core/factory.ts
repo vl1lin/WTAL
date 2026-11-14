@@ -8,6 +8,7 @@
  *   emptyProject()        — пустой проект
  *   demoStudy(name, …)    — синтетическая КВД/КСД горизонтальной скважины с ГРП + история дебитов
  *   autoRoles(study)      — назначить столбцы времени/давления/дебита по физическому смыслу
+ *   newMain(), ensureMain() — главная страница (вся история скважины)
  */
 import type { CalcState, ChartDef, ChartKind, Project, Study } from "./types";
 
@@ -79,7 +80,7 @@ export function defaultCalc(): CalcState {
 
 /** Пустой проект. */
 export function emptyProject(): Project {
-  return { version: 1, studies: [], charts: [], groups: [], calc: defaultCalc() };
+  return ensureMain({ version: 1, studies: [], charts: [], groups: [], calc: defaultCalc() });
 }
 
 /**
@@ -154,4 +155,36 @@ export function autoRoles(s: Study): Study {
       rate: s.rateRoles.rate ?? findQ("rate"),
     },
   };
+}
+
+/**
+ * Пустая главная страница (история скважины) с графиком «давление + дебит».
+ * @returns исследование-главная страница и её график
+ */
+export function newMain(): { study: Study; chart: ChartDef } {
+  const study: Study = {
+    id: uid(),
+    name: "Главная страница",
+    isMain: true,
+    columns: [],
+    roles: {},
+    rateColumns: [],
+    rateRoles: {},
+    testType: "buildup",
+    tpSeconds: 0,
+    rateBeforeM3s: 0,
+  };
+  return { study, chart: newChart("combo", study.id, { name: "История скважины: давление и дебит" }) };
+}
+
+/**
+ * Добавить главную страницу, если её нет, и поставить её первой.
+ * @param p проект
+ * @returns проект с главной страницей
+ */
+export function ensureMain(p: Project): Project {
+  const main = p.studies.find((s) => s.isMain);
+  if (main) return { ...p, studies: [main, ...p.studies.filter((s) => s !== main)] };
+  const m = newMain();
+  return { ...p, studies: [m.study, ...p.studies], charts: [m.chart, ...p.charts] };
 }

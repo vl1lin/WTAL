@@ -172,6 +172,28 @@ describe("раздельные таблицы давления и дебитов
     expect(effectiveTestType(st, b)).toBe("drawdown");
     expect(deltaP(st, b)[2]).toBeCloseTo(8 * 101_325, 6);
   });
+  it("время дебитов = конец режима (как в Saphir): режимы сдвигаются на один", () => {
+    // Конец режимов: 22 м³/сут до 5 ч, затем 0 до 10 ч → остановка в 5 ч.
+    const st = { ...mk(["0", "2", "5", "6", "8"], ["150", "149", "148", "155", "157"], ["5", "10"], ["22", "0"]), rateTimeMode: "end" as const };
+    const b = baseData(st, computeSheet(st));
+    expect(b.rates?.map((r) => r.t_s / 3600)).toEqual([0, 5]);
+    expect(b.tStart_s).toBe(5 * 3600);
+    expect(effectiveTestType(st, b)).toBe("buildup");
+  });
+  it("смена дебита и отклик давления совпадают по времени (даты)", () => {
+    const st = mk(
+      ["01.03.2026 00:00", "01.03.2026 10:00", "01.03.2026 10:30", "01.03.2026 12:00"],
+      ["200", "180", "185", "190"],
+      ["28.02.2026 00:00", "01.03.2026 10:00"],
+      ["50", "0"],
+      true,
+    );
+    const b = baseData(st, computeSheet(st));
+    // Остановка в 10:00 = 10 ч от начала записи давления — там же, где начинается рост давления.
+    expect(b.rates?.map((r) => r.t_s / 3600)).toEqual([-24, 10]);
+    expect(b.tStart_s / 3600).toBe(10);
+    expect(b.dt_s.map((t) => t / 3600)).toEqual([-10, 0, 0.5, 2]);
+  });
   it("без таблицы дебитов — прежнее поведение (от первой строки)", () => {
     const st = { ...mk(["0", "1"], ["150", "151"], [], []), rateColumns: [], rateRoles: {} };
     const b = baseData(st, computeSheet(st));

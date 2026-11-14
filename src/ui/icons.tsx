@@ -40,6 +40,8 @@ const PATHS: Record<string, string> = {
   upload: "M12 4v12M7 11l5 5 5-5M4 20h16",
   calc: "M5 3h14v18H5zM8 7h8M8 12h2M12 12h2M16 12h.01M8 16h2M12 16h2M16 16h.01",
   gear: "M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1",
+  home: "M3 11l9-7 9 7M5 9.5V20h5v-6h4v6h5V9.5",
+  newstudy: "M4 3v17h17M7 15l4-4 3 3 5-6M17 3v6M14 6h6",
   logo: "M3 21V3M3 21h18M5 17c4 0 5-9 9-9s4 4 7 4",
 };
 

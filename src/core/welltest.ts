@@ -53,11 +53,14 @@ export function rateSheetOf(study: Study): Sheet {
 }
 
 /**
- * Режимы из таблицы дебитов, по возрастанию времени.
+ * Режимы из таблицы дебитов, по возрастанию времени начала.
+ * Если в таблице время конца режима (rateTimeMode = "end", как в выгрузках Saphir), режим i
+ * начинается в конце режима i−1, а первый — в startHint (начало записи давления), но не позже своего конца.
  * @param study исследование
+ * @param startHint начало первого режима для варианта «конец режима» (в шкале таблицы дебитов)
  * @returns режимы или null, если таблица пуста / не назначены столбцы
  */
-export function rateTable(study: Study): RateTable | null {
+export function rateTable(study: Study, startHint?: (isDate: boolean) => number | undefined): RateTable | null {
   const tCol = study.rateColumns.find((c) => c.id === study.rateRoles.time);
   const qCol = study.rateColumns.find((c) => c.id === study.rateRoles.rate);
   if (!tCol || !qCol) return null;
@@ -73,7 +76,15 @@ export function rateTable(study: Study): RateTable | null {
   }
   if (rows.length === 0) return null;
   rows.sort((a, b) => a.tAbs_s - b.tAbs_s);
-  return { rows, isDate: tCol.quantity === "datetime" };
+  const isDate = tCol.quantity === "datetime";
+  if (study.rateTimeMode === "end") {
+    const ends = rows.map((r) => r.tAbs_s);
+    const hint = startHint?.(isDate);
+    const first = ends[0] ?? 0;
+    const starts = ends.map((_, i) => (i === 0 ? (hint !== undefined ? Math.min(hint, first) : first) : (ends[i - 1] ?? first)));
+    return { rows: rows.map((r, i) => ({ tAbs_s: starts[i] ?? r.tAbs_s, q_m3_s: r.q_m3_s })), isDate };
+  }
+  return { rows, isDate };
 }
 
 export interface BaseData {
@@ -133,7 +144,8 @@ export function baseData(study: Study, sheet: Sheet, periodRows?: number[]): Bas
   if (t0 === null) return out;
 
   // Режимы в шкале «время от первой строки давления».
-  const rt = rateTable(study);
+  const firstP = t0;
+  const rt = rateTable(study, (isDate) => (isDate === pIsDate ? firstP : isDate ? undefined : 0));
   if (rt) {
     if (rt.isDate && !pIsDate) {
       out.warning = "Дебиты заданы датой, а давление — числом: время таблиц не совместить";
@@ -258,16 +270,20 @@ export function producingTime(study: Study, events: RateEvent[], base: BaseData)
 }
 
 /**
- * Дебит, характеризующий исследование (для калькулятора): до остановки — для КВД, текущий — для КСД.
+ * Дебит, характеризующий исследование (для калькулятора): для КВД — дебит до остановки,
+ * для КСД — дебит после пуска; берётся из истории дебитов на начало периода исследования.
  * @param study исследование
  * @returns дебит, м³/с
  */
 export function representativeRate(study: Study): number {
-  const rt = rateTable(study);
-  if (!rt) return study.rateBeforeM3s;
-  const qs = rt.rows.map((r) => r.q_m3_s);
-  const nonzero = qs.filter((q) => q > 0);
-  return nonzero[nonzero.length - 1] ?? study.rateBeforeM3s;
+  const b = baseData(study, computeSheet(study));
+  if (!b.rates || b.rates.length === 0) return study.rateBeforeM3s;
+  const ev = rateEvents(study, b);
+  const n = ev.length;
+  const last = ev[n - 1]?.q_m3_s ?? Number.NaN;
+  const prev = n > 1 ? (ev[n - 2]?.q_m3_s ?? Number.NaN) : Number.NaN;
+  const q = effectiveTestType(study, b) === "buildup" ? prev : last;
+  return Number.isFinite(q) ? q : study.rateBeforeM3s;
 }
 
 /**

@@ -1,7 +1,7 @@
 /**
  * Левая панель инструментов с раскрывающимися группами.
  *
- * Схема групп:
+ * Схема групп (на главной странице — только «График», «Данные» с «Создать исследование», «Таблица»):
  *   Графики  — Log-log, Semilog, История давления, История дебитов, Давление + дебит, Произвольный (диалог),
  *              По столбцам (диалог), По выделенному (диалог по выделенным строкам)
  *   Данные   — выделение прямоугольником / лассо / кликом, «Множество точек», снять выделение
@@ -61,6 +61,8 @@ export function Sidebar() {
   const st = useApp.getState();
   const T = (t: Tool) => ({ active: tool === t, onClick: () => st.setTool(t) });
   const noStudy = !studyId;
+  // Главная страница: только «График», «Данные» (+ создать исследование), «Таблица».
+  const isMain = useApp((s) => Boolean(s.project.studies.find((x) => x.id === s.activeStudyId)?.isMain));
   const activeChart = (): ReturnType<typeof useApp.getState>["project"]["charts"][number] | undefined => {
     const s = useApp.getState();
     return s.project.charts.find((c) => c.id === s.activeChartId);
@@ -90,6 +92,46 @@ export function Sidebar() {
 
   return (
     <nav className="sidebar" aria-label="Инструменты">
+      {isMain ? (
+        <>
+      <Group title="График">
+        <ToolBtn icon="axes" label="Оси" disabled={!activeChartId} onClick={() => activeChartId && st.setDialog({ kind: "chartSettings", chartId: activeChartId })} title="Параметры и оси активного графика" />
+        <ToolBtn icon="zoomin" label="Приблизить" {...T("zoom")} title="Выделите область рамкой. Двойной клик — масштаб по умолчанию" />
+        <ToolBtn icon="zoomout" label="Отдалить" disabled={!activeChartId} onClick={zoomOut} />
+        <ToolBtn icon="pan" label="Рука" {...T("pan")} title="Сдвиг графика (также средняя кнопка мыши)" />
+        <ToolBtn icon="reset" label="По умолч." disabled={!activeChartId} onClick={() => { const c = activeChart(); if (c) st.updateChart(c.id, { view: c.defaultView, view2: undefined }); }} />
+        <ToolBtn icon="savedef" label="Сохр. масштаб" disabled={!activeChartId} onClick={() => { const c = activeChart(); if (c) st.updateChart(c.id, { defaultView: c.view ?? autoView(buildChartData(c, useApp.getState().project).series, c.xLog, c.yLog) }); }} />
+        <ToolBtn icon="hide" label="Скрыть" disabled={!activeChartId} onClick={() => activeChartId && st.updateChart(activeChartId, { visible: false })} />
+      </Group>
+      <Group
+        title="Данные"
+        extra={
+          <label className="check-line">
+            <input type="checkbox" checked={multi} onChange={(e) => st.setMulti(e.target.checked)} /> Множество точек
+          </label>
+        }
+      >
+        <ToolBtn icon="rect" label="Прямоуг." {...T("rect")} title="Выделение прямоугольником" />
+        <ToolBtn icon="lasso" label="Лассо" {...T("lasso")} />
+        <ToolBtn icon="click" label="По точкам" {...T("click")} title="Выделение кликом (Shift — добавить)" />
+        <ToolBtn icon="clearsel" label="Снять" disabled={noStudy} onClick={() => studyId && st.setSelection(studyId, [])} title="Снять выделение" />
+        {isMain && (
+          <ToolBtn
+            icon="newstudy"
+            label="Создать исследование"
+            disabled={noStudy}
+            title="Новое исследование из выделенных точек"
+            onClick={() => st.setDialog({ kind: "createStudy" })}
+          />
+        )}
+      </Group>
+      <Group title="Таблица">
+        <ToolBtn icon="addcol" label="Пустой столбец" disabled={noStudy} onClick={() => studyId && st.addColumn(studyId, {}, undefined, useApp.getState().tablePart)} />
+        <ToolBtn icon="fx" label="Столбец ƒx" disabled={noStudy} onClick={() => st.setDialog({ kind: "newColumn", formula: true })} />
+      </Group>
+        </>
+      ) : (
+        <>
       <Group title="Графики">
         <ToolBtn icon="loglog" label="Log-log" disabled={noStudy} onClick={() => add("loglog")} />
         <ToolBtn icon="semilog" label="Semilog" disabled={noStudy} onClick={() => add("semilog")} />
@@ -118,6 +160,15 @@ export function Sidebar() {
         <ToolBtn icon="lasso" label="Лассо" {...T("lasso")} />
         <ToolBtn icon="click" label="По точкам" {...T("click")} title="Выделение кликом (Shift — добавить)" />
         <ToolBtn icon="clearsel" label="Снять" disabled={noStudy} onClick={() => studyId && st.setSelection(studyId, [])} title="Снять выделение" />
+        {isMain && (
+          <ToolBtn
+            icon="newstudy"
+            label="Создать исследование"
+            disabled={noStudy}
+            title="Новое исследование из выделенных точек"
+            onClick={() => st.setDialog({ kind: "createStudy" })}
+          />
+        )}
       </Group>
       <Group title="Прямые">
         <ToolBtn icon="line2" label="По 2 точкам" {...T("line2")} title="Прямая по двум кликам" />
@@ -146,6 +197,8 @@ export function Sidebar() {
         <ToolBtn icon="addcol" label="Пустой столбец" disabled={noStudy} onClick={() => studyId && st.addColumn(studyId, {}, undefined, useApp.getState().tablePart)} />
         <ToolBtn icon="fx" label="Столбец ƒx" disabled={noStudy} onClick={() => st.setDialog({ kind: "newColumn", formula: true })} />
       </Group>
+        </>
+      )}
     </nav>
   );
 }

@@ -8,7 +8,7 @@
  *   ├─ режим: все / выбранные / по группам (группа — среднее по исследованиям группы)
  *   └─ fractureArea() → A, Σx_f, x̄_f в выбранных единицах; копирование результатов
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useApp } from "../store";
 import { QtyInput, UnitSelect, NumInput } from "../dialogs/common";
 import { fractureArea, mixture } from "../core/fracture";
@@ -22,6 +22,7 @@ import { representativeRate } from "../core/welltest";
 const DEFAULT_UNITS: Record<string, string> = {
   h: "m",
   k: "mD",
+  kf: "mD",
   wc: "frac",
   fvf: "m3/m3",
   mu: "cP",
@@ -36,7 +37,8 @@ const DEFAULT_UNITS: Record<string, string> = {
 
 export function Calculator() {
   const calc = useApp((s) => s.project.calc);
-  const studies = useApp((s) => s.project.studies);
+  const allStudies = useApp((s) => s.project.studies);
+  const studies = useMemo(() => allStudies.filter((s) => !s.isMain), [allStudies]);
   const groups = useApp((s) => s.project.groups);
   const st = useApp.getState();
   const u = (k: string): string => calc.units[k] ?? DEFAULT_UNITS[k] ?? "-";
@@ -111,7 +113,7 @@ export function Calculator() {
             B = Bн(1−W) + Bв·W
             <br />μ = μн·μв / (W·μн + (1−W)·μв)
             <br />cₜ = cск + (1−W)cн + W·cв
-            <br />k = K_рад / n
+            <br />k = K_рад / n — проницаемость без учёта трещин
             <br />A = 2qB / (√π·m) · √(μ / (cₜ·k·φ))
             <br />Σx_f = A / (4·h·n)
             <br />x̄_f = Σx_f / n
@@ -141,6 +143,15 @@ export function Calculator() {
               <label className="lbl">Число трещин n<div className="qty"><NumInput label="Число трещин" value={calc.fractures} onChange={(v) => set({ fractures: Math.max(1, Math.round(v)) })} /><span className="unit-fixed">шт</span></div></label>
               <label className="lbl">Обводнённость W<QtyInput label="Обводнённость" dim="fraction" valueSI={calc.waterCut} unit={u("wc")} onUnit={setU("wc")} onValue={(waterCut) => set({ waterCut })} /></label>
               <label className="lbl">K_рад<QtyInput label="Проницаемость K_рад" dim="permeability" valueSI={calc.kRad_m2} unit={u("k")} onUnit={setU("k")} onValue={(kRad_m2) => set({ kRad_m2 })} /></label>
+              <div className="lbl">
+                Проницаемость без учёта трещин k = K_рад / n
+                <div className="qty">
+                  <output className="input num mono calc-out" aria-label="Проницаемость без учёта трещин">
+                    {fmt(fromSI(calc.kRad_m2 / calc.fractures, "permeability", u("kf")), 6)}
+                  </output>
+                  <UnitSelect dim="permeability" value={u("kf")} label="Проницаемость без учёта трещин" onChange={setU("kf")} />
+                </div>
+              </div>
             </div>
           </div>
           <div className="col gap">
@@ -301,7 +312,7 @@ function GroupEditor() {
           <hr />
           <div className="col gap pad">
             <input className="input" value={name} aria-label="Название группы" onChange={(e) => setName(e.target.value)} />
-            {project.studies.map((s) => (
+            {project.studies.filter((s) => !s.isMain).map((s) => (
               <label key={s.id} className="row gap small">
                 <input type="checkbox" checked={ids.includes(s.id)} onChange={(e) => setIds(e.target.checked ? [...ids, s.id] : ids.filter((x) => x !== s.id))} />
                 {s.name}

@@ -22,6 +22,7 @@ import { Calculator } from "./calc/Calculator";
 import { ImportDialog } from "./dialogs/ImportDialog";
 import { ChartSettingsDialog, ColumnsChartDialog, FlexDialog, TrendDialog } from "./dialogs/ChartDialogs";
 import { ColumnPropsDialog, NewColumnDialog, StudyDialog } from "./dialogs/ColumnDialogs";
+import { CreateStudyDialog } from "./dialogs/CreateStudyDialog";
 
 const TOOL_NAMES: Record<string, string> = {
   pan: "Рука — перетаскивание графика",
@@ -65,6 +66,8 @@ function Dialogs() {
       return <TrendDialog chartId={d.chartId} />;
     case "study":
       return <StudyDialog studyId={d.studyId} />;
+    case "createStudy":
+      return <CreateStudyDialog />;
   }
 }
 
