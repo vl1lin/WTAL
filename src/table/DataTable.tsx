@@ -354,13 +354,18 @@ export function DataTable({ study, part }: { study: Study; part: TablePart }) {
             Давление
           </button>
           <button type="button" role="tab" aria-selected={!isP} className={!isP ? "on" : ""} onClick={() => st.setTablePart("q")}>
-            Дебиты{study.rateColumns.length > 0 ? ` (${sheet.rowCount})` : ""}
+            Дебиты{study.rateColumns.length > 0 ? ` (${rateRowCount(study)})` : ""}
           </button>
         </div>
         <span className="muted small">{isP ? `${sheet.rowCount} строк` : "время = начало режима"}</span>
         {selected.size > 0 && (
           <button type="button" className="badge yellow" title="Снять выделение" onClick={() => st.setSelection(selKey, [])}>
             Выделено: {selected.size} ✕
+          </button>
+        )}
+        {isP && selected.size > 0 && (
+          <button type="button" className="btn primary small" onClick={() => st.setDialog({ kind: "flex", rows: [...selected] })}>
+            График по выделенному
           </button>
         )}
         <span className="grow" />
@@ -623,3 +628,11 @@ function CellMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuI
   );
 }
 
+
+/** Число заполненных строк таблицы дебитов (для подписи вкладки). */
+function rateRowCount(study: Study): number {
+  let n = 0;
+  const len = study.rateColumns.reduce((m, c) => Math.max(m, c.cells.length), 0);
+  for (let r = 0; r < len; r++) if (study.rateColumns.some((c) => (c.cells[r] ?? "").trim() !== "")) n++;
+  return n;
+}

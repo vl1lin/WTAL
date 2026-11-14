@@ -3,7 +3,8 @@
  *
  * Схема групп:
  *   Графики  — Log-log, Semilog, История давления, История дебитов, Давление + дебит, Произвольный (диалог), По столбцам (диалог)
- *   Данные   — выделение прямоугольником / лассо / кликом, «Множество точек», снять выделение
+ *   Данные   — выделение прямоугольником / лассо / кликом, «Множество точек», снять выделение,
+ *              график по выделенным точкам
  *   Прямые   — по 2 точкам, тренд (диалог), выбрать, инфо, изменить, удалить
  *   График   — параметры/оси, приблизить (рамкой), отдалить, по умолчанию, сохранить масштаб, рука, скрыть
  *   Таблица  — пустой столбец, ƒx-столбец, построить по выделенному
@@ -57,6 +58,7 @@ export function Sidebar() {
   const activeChartId = useApp((s) => s.activeChartId);
   const selectedLine = useApp((s) => s.selectedLine);
   const view = useApp((s) => s.view);
+  const selCount = useApp((s) => (s.activeStudyId ? (s.selection[s.activeStudyId]?.length ?? 0) : 0));
   const st = useApp.getState();
   const T = (t: Tool) => ({ active: tool === t, onClick: () => st.setTool(t) });
   const noStudy = !studyId;
@@ -109,7 +111,14 @@ export function Sidebar() {
         <ToolBtn icon="rect" label="Прямоуг." {...T("rect")} title="Выделение прямоугольником" />
         <ToolBtn icon="lasso" label="Лассо" {...T("lasso")} />
         <ToolBtn icon="click" label="По точкам" {...T("click")} title="Выделение кликом (Shift — добавить)" />
-        <ToolBtn icon="clearsel" label="Снять" disabled={noStudy} onClick={() => studyId && st.setSelection(studyId, [])} title="Снять выделение" />
+        <ToolBtn icon="clearsel" label="Снять" disabled={noStudy || selCount === 0} onClick={() => studyId && st.setSelection(studyId, [])} title="Снять выделение" />
+        <ToolBtn
+          icon="plotsel"
+          label="График по выделен."
+          disabled={noStudy || selCount === 0}
+          title="Построить график по выделенным точкам (например, давление от √t)"
+          onClick={() => studyId && st.setDialog({ kind: "flex", rows: useApp.getState().selection[studyId] ?? [] })}
+        />
       </Group>
       <Group title="Прямые">
         <ToolBtn icon="line2" label="По 2 точкам" {...T("line2")} title="Прямая по двум кликам" />
