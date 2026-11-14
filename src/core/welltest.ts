@@ -2,39 +2,108 @@
  * Расчёты ГДИС.
  *
  * Схема:
- *   Study + Sheet ──baseData()──► BaseData (СИ: Δt_s, p_Pa, q_m3_s по строкам)
- *        ├─ deltaP()                         — Δp (КВД: p − p0, КСД: p0 − p), Па
- *        ├─ rateEvents()                     — история дебитов для суперпозиции
- *        ├─ superposedTime(fn, sup, …)       — функция времени с суперпозицией (ось X)
- *        └─ bourdetDerivative(x, y, L)       — производная Бурде dΔp/dX по ln-времени
+ *   таблица дебитов ──rateTable()──► режимы (абсолютное время начала, дебит)
+ *   таблица давления + режимы ──baseData()──► BaseData (СИ)
+ *        tStart_s — начало анализируемого периода = последнее изменение дебита
+ *                   (если таблицы дебитов нет — первая строка давления)
+ *        dt_s     — время от начала периода (Δt), hist_s — время от первой строки давления
+ *   ├─ deltaP()                         — Δp от давления p0 в момент tStart (КВД: p − p0, КСД: p0 − p), Па
+ *   ├─ rateEvents()                     — история дебитов относительно tStart (для суперпозиции)
+ *   ├─ producingTime()                  — tp: длительность работы до последнего изменения режима
+ *   ├─ superposedTime(fn, sup, …)       — функция времени с суперпозицией (ось X)
+ *   └─ bourdetDerivative(x, y, L)       — производная Бурде dΔp/dX по ln-времени
  *
+ * Время в таблицах: «Дата и время» (абсолютное) или число в единицах времени. Если давление
+ * задано датой, а дебиты числом — числа дебитов считаются от первой строки давления.
  * Все входы и выходы — в СИ, кроме функций времени: они берутся от времени в часах,
  * чтобы √Δt был в ч^0.5 (как принято при поиске инварианты).
  */
 import type { Study, Superposition, TimeFn } from "./types";
-import type { Sheet } from "./sheet";
+import { computeSheet, type Sheet } from "./sheet";
 import { toSI } from "./units";
 
+export interface RateRow {
+  /** Абсолютное время начала режима, с (дата — секунды эпохи, число — в СИ). */
+  tAbs_s: number;
+  q_m3_s: number;
+}
+
+export interface RateTable {
+  rows: RateRow[];
+  /** Время задано датой. */
+  isDate: boolean;
+}
+
+const rateSheetCache = new WeakMap<Study, Sheet>();
+
+/**
+ * Вычисленная таблица дебитов (кэшируется по объекту исследования).
+ * @param study исследование
+ * @returns Sheet таблицы дебитов
+ */
+export function rateSheetOf(study: Study): Sheet {
+  let s = rateSheetCache.get(study);
+  if (!s) {
+    s = computeSheet({ ...study, columns: study.rateColumns });
+    rateSheetCache.set(study, s);
+  }
+  return s;
+}
+
+/**
+ * Режимы из таблицы дебитов, по возрастанию времени.
+ * @param study исследование
+ * @returns режимы или null, если таблица пуста / не назначены столбцы
+ */
+export function rateTable(study: Study): RateTable | null {
+  const tCol = study.rateColumns.find((c) => c.id === study.rateRoles.time);
+  const qCol = study.rateColumns.find((c) => c.id === study.rateRoles.rate);
+  if (!tCol || !qCol) return null;
+  const sh = rateSheetOf(study);
+  const tv = sh.numeric(tCol.id);
+  const qv = sh.numeric(qCol.id);
+  const rows: RateRow[] = [];
+  for (let r = 0; r < sh.rowCount; r++) {
+    const t = tv[r] ?? Number.NaN;
+    const q = qv[r] ?? Number.NaN;
+    if (!Number.isFinite(t) || !Number.isFinite(q)) continue;
+    rows.push({ tAbs_s: tCol.quantity === "datetime" ? t : toSI(t, "time", tCol.unit), q_m3_s: toSI(q, "rate", qCol.unit) });
+  }
+  if (rows.length === 0) return null;
+  rows.sort((a, b) => a.tAbs_s - b.tAbs_s);
+  return { rows, isDate: tCol.quantity === "datetime" };
+}
+
 export interface BaseData {
-  /** Индексы строк таблицы, вошедших в расчёт. */
+  /** Индексы строк таблицы давления, вошедших в расчёт. */
   rows: number[];
-  /** Время от начала исследования, с. */
+  /** Время от начала анализируемого периода (Δt), с; до начала периода — отрицательное. */
   dt_s: number[];
+  /** Время от первой строки давления, с (для графика истории). */
+  hist_s: number[];
   /** Давление, Па. */
   p_Pa: number[];
-  /** Дебит, м³/с (NaN, если столбца нет). */
+  /** Дебит из таблицы давления (устаревший способ), м³/с; NaN, если столбца нет. */
   q_m3_s: number[];
+  /** Начало анализируемого периода относительно первой строки давления, с. */
+  tStart_s: number;
+  /** Давление в начале периода, Па. */
+  p0_Pa: number;
+  /** Режимы из таблицы дебитов, приведённые ко времени давления (hist-шкала), или null. */
+  rates: { t_s: number; q_m3_s: number }[] | null;
+  /** Предупреждение о несовместимом времени таблиц. */
+  warning?: string;
 }
 
 /**
  * Собрать исходные ряды исследования в СИ.
- * Строки без времени или давления пропускаются. Время отсчитывается от первой строки.
+ * Строки без времени или давления пропускаются.
  * @param study исследование
- * @param sheet вычисленная таблица
- * @returns ряды по строкам
+ * @param sheet вычисленная таблица давления
+ * @returns ряды по строкам, начало периода, давление p0 и режимы
  */
 export function baseData(study: Study, sheet: Sheet): BaseData {
-  const out: BaseData = { rows: [], dt_s: [], p_Pa: [], q_m3_s: [] };
+  const out: BaseData = { rows: [], dt_s: [], hist_s: [], p_Pa: [], q_m3_s: [], tStart_s: 0, p0_Pa: Number.NaN, rates: null };
   const tCol = study.columns.find((c) => c.id === study.roles.time);
   const pCol = study.columns.find((c) => c.id === study.roles.pressure);
   if (!tCol || !pCol) return out;
@@ -42,62 +111,127 @@ export function baseData(study: Study, sheet: Sheet): BaseData {
   const tv = sheet.numeric(tCol.id);
   const pv = sheet.numeric(pCol.id);
   const qv = qCol ? sheet.numeric(qCol.id) : null;
+  const pIsDate = tCol.quantity === "datetime";
   let t0: number | null = null;
   for (let r = 0; r < sheet.rowCount; r++) {
     const t = tv[r] ?? Number.NaN;
     const p = pv[r] ?? Number.NaN;
     if (!Number.isFinite(t) || !Number.isFinite(p)) continue;
-    const tSI = tCol.quantity === "datetime" ? t : toSI(t, "time", tCol.unit);
+    const tSI = pIsDate ? t : toSI(t, "time", tCol.unit);
     if (t0 === null) t0 = tSI;
     out.rows.push(r);
-    out.dt_s.push(tSI - t0);
+    out.hist_s.push(tSI - t0);
     out.p_Pa.push(toSI(p, "pressure", pCol.unit));
     const q = qv && qCol ? (qv[r] ?? Number.NaN) : Number.NaN;
     out.q_m3_s.push(Number.isFinite(q) && qCol ? toSI(q, "rate", qCol.unit) : Number.NaN);
   }
+  if (t0 === null) return out;
+
+  // Режимы в шкале «время от первой строки давления».
+  const rt = rateTable(study);
+  if (rt) {
+    if (rt.isDate && !pIsDate) {
+      out.warning = "Дебиты заданы датой, а давление — числом: время таблиц не совместить";
+    } else {
+      const base = rt.isDate === pIsDate ? t0 : 0;
+      out.rates = rt.rows.map((r) => ({ t_s: r.tAbs_s - base, q_m3_s: r.q_m3_s }));
+    }
+  }
+
+  // Начало периода — последнее изменение дебита не позже последней точки давления.
+  const lastHist = out.hist_s[out.hist_s.length - 1] ?? 0;
+  if (out.rates && out.rates.length > 0) {
+    let start = Number.NaN;
+    let prevQ = Number.NaN;
+    for (const e of out.rates) {
+      const changed = !Number.isFinite(prevQ) || Math.abs(e.q_m3_s - prevQ) > 1e-12 * Math.max(1, Math.abs(prevQ));
+      if (changed && e.t_s <= lastHist) start = e.t_s;
+      prevQ = e.q_m3_s;
+    }
+    out.tStart_s = Number.isFinite(start) ? Math.max(0, start) : 0;
+  }
+  // p0 — давление в последней точке не позже начала периода (или первая точка).
+  let i0 = 0;
+  for (let i = 0; i < out.hist_s.length; i++) if ((out.hist_s[i] ?? 0) <= out.tStart_s + 1e-9) i0 = i;
+  out.p0_Pa = out.p_Pa[i0] ?? Number.NaN;
+  out.dt_s = out.hist_s.map((h) => h - out.tStart_s);
   return out;
 }
 
 /**
- * Перепад давления относительно первой точки.
+ * Перепад давления относительно давления в начале периода.
  * @param study исследование (тип КВД/КСД)
  * @param base ряды в СИ
  * @returns Δp, Па (положительный для обоих типов)
  */
 export function deltaP(study: Study, base: BaseData): number[] {
-  const p0 = base.p_Pa[0] ?? 0;
+  const p0 = base.p0_Pa;
   return base.p_Pa.map((p) => (study.testType === "buildup" ? p - p0 : p0 - p));
 }
 
 export interface RateEvent {
-  /** Начало режима относительно начала исследования, с (может быть < 0). */
+  /** Начало режима относительно начала анализируемого периода, с (может быть < 0). */
   t_s: number;
   q_m3_s: number;
 }
 
 /**
- * История дебитов: режим до исследования (для КВД) + изменения дебита в таблице.
+ * История дебитов относительно начала периода.
+ * Если есть таблица дебитов — берётся она; иначе режим до исследования из tp и «дебита до остановки»
+ * плюс изменения дебита в столбце таблицы давления (устаревший способ).
  * @param study исследование
  * @param base ряды в СИ
- * @returns список режимов по возрастанию времени
+ * @returns список режимов по возрастанию времени (повторяющиеся дебиты объединены)
  */
 export function rateEvents(study: Study, base: BaseData): RateEvent[] {
   const ev: RateEvent[] = [];
-  if (study.testType === "buildup") ev.push({ t_s: -study.tpSeconds, q_m3_s: study.rateBeforeM3s });
-  let last = study.testType === "buildup" ? study.rateBeforeM3s : Number.NaN;
+  const push = (t_s: number, q: number): void => {
+    const last = ev[ev.length - 1];
+    if (last && Math.abs(last.q_m3_s - q) <= 1e-12 * Math.max(1, Math.abs(q))) return;
+    ev.push({ t_s, q_m3_s: q });
+  };
+  if (base.rates && base.rates.length > 0) {
+    for (const r of base.rates) if (r.t_s <= base.tStart_s + 1e-9) push(r.t_s - base.tStart_s, r.q_m3_s);
+    return ev;
+  }
+  if (study.testType === "buildup") push(-study.tpSeconds, study.rateBeforeM3s);
   for (let i = 0; i < base.dt_s.length; i++) {
     const q = base.q_m3_s[i] ?? Number.NaN;
-    if (!Number.isFinite(q)) continue;
-    if (!Number.isFinite(last) || Math.abs(q - last) > 1e-12 * Math.max(1, Math.abs(last))) {
-      ev.push({ t_s: base.dt_s[i] ?? 0, q_m3_s: q });
-      last = q;
-    }
+    if (Number.isFinite(q)) push(base.dt_s[i] ?? 0, q);
   }
   if (study.testType === "buildup" && (ev.length === 1 || (ev[1]?.t_s ?? 0) > 0)) {
     ev.splice(1, 0, { t_s: 0, q_m3_s: 0 });
   }
   if (ev.length === 0) ev.push({ t_s: 0, q_m3_s: study.rateBeforeM3s });
   return ev;
+}
+
+/**
+ * Время работы до начала периода tp, с (для Хорнера, Агарвала, двухрежимной суперпозиции).
+ * @param study исследование
+ * @param events история дебитов относительно начала периода
+ * @param base ряды (наличие таблицы дебитов)
+ * @returns tp, с
+ */
+export function producingTime(study: Study, events: RateEvent[], base: BaseData): number {
+  if (base.rates && base.rates.length > 0) {
+    const first = events[0];
+    return first && first.t_s < 0 ? -first.t_s : 0;
+  }
+  return study.tpSeconds;
+}
+
+/**
+ * Дебит, характеризующий исследование (для калькулятора): до остановки — для КВД, текущий — для КСД.
+ * @param study исследование
+ * @returns дебит, м³/с
+ */
+export function representativeRate(study: Study): number {
+  const rt = rateTable(study);
+  if (!rt) return study.rateBeforeM3s;
+  const qs = rt.rows.map((r) => r.q_m3_s);
+  const nonzero = qs.filter((q) => q > 0);
+  return nonzero[nonzero.length - 1] ?? study.rateBeforeM3s;
 }
 
 /**

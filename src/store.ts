@@ -11,7 +11,7 @@
  * Все изменения проекта иммутабельны — это нужно для кэша вычислений таблиц (WeakMap по Study).
  */
 import { create } from "zustand";
-import type { CalcState, ChartDef, Column, LineDef, Project, Study } from "./core/types";
+import type { CalcState, ChartDef, Column, LineDef, Project, Study, TablePart } from "./core/types";
 import { autoRoles, demoStudy, emptyProject, newChart, uid } from "./core/factory";
 import { loadProject, saveProjectDebounced } from "./persist";
 
@@ -19,11 +19,11 @@ export type Tool = "pan" | "zoom" | "rect" | "lasso" | "click" | "line2" | "pick
 export type ViewMode = "split" | "charts" | "calc";
 
 export type Dialog =
-  | { kind: "import"; studyId?: string }
+  | { kind: "import"; part?: TablePart }
   | { kind: "flex"; rows?: number[] }
   | { kind: "columnsChart" }
   | { kind: "newColumn"; formula: boolean }
-  | { kind: "columnProps"; columnId: string }
+  | { kind: "columnProps"; columnId: string; part: TablePart }
   | { kind: "chartSettings"; chartId: string }
   | { kind: "trend"; chartId: string }
   | { kind: "study"; studyId: string }
@@ -41,7 +41,10 @@ interface AppState {
   dialog: Dialog;
   selection: Record<string, number[]>;
   chartsFilter: string[] | null;
+  /** Какая таблица исследования открыта слева: давление или дебиты. */
+  tablePart: TablePart;
 
+  setTablePart(p: TablePart): void;
   setView(v: ViewMode): void;
   setTool(t: Tool): void;
   setMulti(v: boolean): void;
@@ -56,12 +59,14 @@ interface AppState {
   addStudy(s: Study, charts: ChartDef["kind"][]): void;
   updateStudy(id: string, patch: Partial<Study>): void;
   removeStudy(id: string): void;
-  setCell(studyId: string, col: number, row: number, value: string): void;
-  setCells(studyId: string, updates: { col: number; row: number; value: string }[]): void;
-  addColumn(studyId: string, col: Partial<Column>, index?: number): void;
-  updateColumn(studyId: string, columnId: string, patch: Partial<Column>): void;
-  removeColumn(studyId: string, columnId: string): void;
-  insertRow(studyId: string, row: number): void;
+  /** Заменить таблицу давления или дебитов исследования (загрузка в существующее исследование). */
+  replaceTable(studyId: string, part: TablePart, columns: Column[]): void;
+  setCell(studyId: string, col: number, row: number, value: string, part?: TablePart): void;
+  setCells(studyId: string, updates: { col: number; row: number; value: string }[], part?: TablePart): void;
+  addColumn(studyId: string, col: Partial<Column>, index?: number, part?: TablePart): void;
+  updateColumn(studyId: string, columnId: string, patch: Partial<Column>, part?: TablePart): void;
+  removeColumn(studyId: string, columnId: string, part?: TablePart): void;
+  insertRow(studyId: string, row: number, part?: TablePart): void;
 
   setSelection(studyId: string, rows: number[]): void;
 
@@ -100,15 +105,27 @@ function mapChart(p: Project, id: string, f: (c: ChartDef) => ChartDef): Project
   return { ...p, charts: p.charts.map((c) => (c.id === id ? f(c) : c)) };
 }
 
-/** Выровнять длину всех столбцов исследования. */
+/** Столбцы выбранной таблицы исследования. */
+export function tableCols(s: Study, part: TablePart): Column[] {
+  return part === "q" ? s.rateColumns : s.columns;
+}
+
+/** Исследование с заменёнными столбцами выбранной таблицы. */
+function withCols(s: Study, part: TablePart, cols: Column[]): Study {
+  return part === "q" ? { ...s, rateColumns: cols } : { ...s, columns: cols };
+}
+
+/** Выровнять длину всех столбцов таблицы. */
+function padCols(cols: Column[]): Column[] {
+  const n = cols.reduce((m, c) => Math.max(m, c.cells.length), 0);
+  return cols.map((c) =>
+    c.cells.length === n ? c : { ...c, cells: [...c.cells, ...new Array<string>(n - c.cells.length).fill("")] },
+  );
+}
+
+/** Выровнять длину столбцов в обеих таблицах исследования. */
 function normalizeRows(s: Study): Study {
-  const n = s.columns.reduce((m, c) => Math.max(m, c.cells.length), 0);
-  return {
-    ...s,
-    columns: s.columns.map((c) =>
-      c.cells.length === n ? c : { ...c, cells: [...c.cells, ...new Array<string>(n - c.cells.length).fill("")] },
-    ),
-  };
+  return { ...s, columns: padCols(s.columns), rateColumns: padCols(s.rateColumns) };
 }
 
 /**
@@ -152,7 +169,9 @@ export const useApp = create<AppState>((set, get) => ({
   dialog: null,
   selection: {},
   chartsFilter: null,
+  tablePart: "p",
 
+  setTablePart: (tablePart) => set({ tablePart }),
   setView: (view) => set({ view }),
   setTool: (tool) => set({ tool }),
   setMulti: (multiSelect) => set({ multiSelect }),
@@ -171,6 +190,7 @@ export const useApp = create<AppState>((set, get) => ({
       charts.push(newChart("loglog", s.id, { name: `Диагностика ${s.name} (log-log)` }));
       charts.push(newChart("flex", s.id, { name: `Линейный поток: Δp от √t`, timeFn: "sqrt", yFn: "dp" }));
       charts.push(newChart("history", s.id, { name: "История давления" }));
+      charts.push(newChart("rates", s.id, { name: "История дебитов", visible: false }));
     }
     const p = get().project;
     const proj: Project = { ...p, studies: [...p.studies, ...studies], charts: [...p.charts, ...charts] };
@@ -180,7 +200,17 @@ export const useApp = create<AppState>((set, get) => ({
   addStudy: (s, kinds) => {
     const study = autoRoles(normalizeRows(s));
     const charts = kinds.map((k) =>
-      newChart(k, study.id, k === "flex" ? { name: "Линейный поток: Δp от √t" } : k === "loglog" ? { name: `Диагностика ${study.name} (log-log)` } : {}),
+      newChart(
+        k,
+        study.id,
+        k === "flex"
+          ? { name: "Линейный поток: Δp от √t" }
+          : k === "loglog"
+            ? { name: `Диагностика ${study.name} (log-log)` }
+            : k === "rates"
+              ? { name: "История дебитов" }
+              : {},
+      ),
     );
     set((st) => ({
       project: { ...st.project, studies: [...st.project.studies, study], charts: [...st.project.charts, ...charts] },
@@ -202,64 +232,75 @@ export const useApp = create<AppState>((set, get) => ({
         activeStudyId: st.activeStudyId === id ? (studies[0]?.id ?? null) : st.activeStudyId,
       };
     }),
-  setCell: (studyId, col, row, value) => get().setCells(studyId, [{ col, row, value }]),
-  setCells: (studyId, updates) =>
+  replaceTable: (studyId, part, columns) =>
+    set((st) => ({
+      project: mapStudy(st.project, studyId, (s) => autoRoles(normalizeRows(part === "q" ? { ...s, rateColumns: columns, rateRoles: {} } : { ...s, columns, roles: {} }))),
+    })),
+  setCell: (studyId, col, row, value, part = "p") => get().setCells(studyId, [{ col, row, value }], part),
+  setCells: (studyId, updates, part = "p") =>
     set((st) => ({
       project: mapStudy(st.project, studyId, (s) => {
-        const columns = s.columns.map((c) => ({ ...c, cells: [...c.cells] }));
+        const columns = tableCols(s, part).map((c) => ({ ...c, cells: [...c.cells] }));
         for (const u of updates) {
           const c = columns[u.col];
           if (!c) continue;
           while (c.cells.length <= u.row) c.cells.push("");
           c.cells[u.row] = u.value;
         }
-        return normalizeRows({ ...s, columns });
+        return normalizeRows(withCols(s, part, columns));
       }),
     })),
-  addColumn: (studyId, col, index) =>
+  addColumn: (studyId, col, index, part = "p") =>
     set((st) => ({
       project: mapStudy(st.project, studyId, (s) => {
-        const n = s.columns.reduce((m, c) => Math.max(m, c.cells.length), 0);
+        const cols = tableCols(s, part);
+        const n = cols.reduce((m, c) => Math.max(m, c.cells.length), 0);
         const c: Column = {
           id: uid(),
-          name: col.name ?? `Столбец ${s.columns.length + 1}`,
+          name: col.name ?? `Столбец ${cols.length + 1}`,
           quantity: col.quantity ?? "other",
           unit: col.unit ?? "-",
-          cells: col.cells ?? new Array<string>(n).fill(""),
+          cells: col.cells ?? new Array<string>(Math.max(n, part === "q" ? 10 : 0)).fill(""),
           formula: col.formula,
         };
-        const columns = [...s.columns];
+        const columns = [...cols];
         columns.splice(index ?? columns.length, 0, c);
-        return normalizeRows({ ...s, columns });
+        return normalizeRows(withCols(s, part, columns));
       }),
     })),
-  updateColumn: (studyId, columnId, patch) =>
+  updateColumn: (studyId, columnId, patch, part = "p") =>
     set((st) => ({
-      project: mapStudy(st.project, studyId, (s) => ({
-        ...s,
-        columns: s.columns.map((c) => (c.id === columnId ? { ...c, ...patch } : c)),
-      })),
+      project: mapStudy(st.project, studyId, (s) =>
+        withCols(s, part, tableCols(s, part).map((c) => (c.id === columnId ? { ...c, ...patch } : c))),
+      ),
     })),
-  removeColumn: (studyId, columnId) =>
+  removeColumn: (studyId, columnId, part = "p") =>
     set((st) => ({
       project: mapStudy(st.project, studyId, (s) => {
         const roles = { ...s.roles };
         (Object.keys(roles) as (keyof typeof roles)[]).forEach((k) => {
           if (roles[k] === columnId) delete roles[k];
         });
-        return { ...s, roles, columns: s.columns.filter((c) => c.id !== columnId) };
+        const rateRoles = { ...s.rateRoles };
+        (Object.keys(rateRoles) as (keyof typeof rateRoles)[]).forEach((k) => {
+          if (rateRoles[k] === columnId) delete rateRoles[k];
+        });
+        return withCols({ ...s, roles, rateRoles }, part, tableCols(s, part).filter((c) => c.id !== columnId));
       }),
     })),
-  insertRow: (studyId, row) =>
+  insertRow: (studyId, row, part = "p") =>
     set((st) => ({
-      project: mapStudy(st.project, studyId, (s) => ({
-        ...s,
-        columns: s.columns.map((c) => {
-          const cells = [...c.cells];
-          cells.splice(row, 0, "");
-          return { ...c, cells };
-        }),
-      })),
+      project: mapStudy(st.project, studyId, (s) =>
+        withCols(
+          s,
+          part,
+          tableCols(s, part).map((c) => {
+            const cells = [...c.cells];
+            cells.splice(row, 0, "");
+            return { ...c, cells };
+          }),
+        ),
+      ),
     })),
 
   setSelection: (studyId, rows) =>

@@ -6,7 +6,8 @@
  *   newChart(kind, …)     — график с параметрами по умолчанию для вида
  *   defaultCalc()         — входные данные калькулятора (значения из Excel пользователя)
  *   emptyProject()        — пустой проект
- *   demoStudy(name, …)    — синтетическая КВД горизонтальной скважины с ГРП
+ *   demoStudy(name, …)    — синтетическая КВД/КСД горизонтальной скважины с ГРП + история дебитов
+ *   autoRoles(study)      — назначить столбцы времени/давления/дебита по физическому смыслу
  */
 import type { CalcState, ChartDef, ChartKind, Project, Study } from "./types";
 
@@ -22,6 +23,7 @@ const KIND_NAMES: Record<ChartKind, string> = {
   loglog: "Log-log",
   semilog: "Semilog",
   history: "История давления",
+  rates: "История дебитов",
   flex: "Произвольный",
   columns: "По столбцам",
 };
@@ -117,9 +119,14 @@ export function demoStudy(name: string, scale = 1, shift = 1, testType: Study["t
         unit: "atm",
         cells: [p0.toFixed(3), ...dp.map((d, i) => (p0 + (testType === "buildup" ? 1 : -1) * d * noise(i) * 0.12).toFixed(3))],
       },
-      { id: uid(), name: "Расход", quantity: "rate", unit: "m3/d", cells: ["0", ...t.map(() => "0")] },
     ],
     roles: {},
+    // История режимов: работа 2000 ч до начала записи, затем остановка (КВД) или пуск (КСД).
+    rateColumns: [
+      { id: uid(), name: "Начало режима", quantity: "time", unit: "h", cells: testType === "buildup" ? ["-2000", "0"] : ["-500", "0"] },
+      { id: uid(), name: "Дебит", quantity: "rate", unit: "m3/d", cells: testType === "buildup" ? ["22", "0"] : ["0", "22"] },
+    ],
+    rateRoles: {},
     testType,
     tpSeconds: 2000 * 3600,
     rateBeforeM3s: 22 / 86_400,
@@ -133,12 +140,17 @@ export function demoStudy(name: string, scale = 1, shift = 1, testType: Study["t
  */
 export function autoRoles(s: Study): Study {
   const find = (...q: string[]): string | undefined => s.columns.find((c) => q.includes(c.quantity))?.id;
+  const findQ = (...q: string[]): string | undefined => s.rateColumns.find((c) => q.includes(c.quantity))?.id;
   return {
     ...s,
     roles: {
       time: s.roles.time ?? find("time") ?? find("datetime"),
       pressure: s.roles.pressure ?? find("pressure"),
       rate: s.roles.rate ?? find("rate"),
+    },
+    rateRoles: {
+      time: s.rateRoles.time ?? findQ("datetime") ?? findQ("time"),
+      rate: s.rateRoles.rate ?? findQ("rate"),
     },
   };
 }

@@ -3,8 +3,9 @@
  *
  * Схема:
  *   Project
- *   ├─ studies: Study[]            — исследования (КВД_1, КСД_2 …), у каждого своя таблица
- *   │    └─ columns: Column[]      — столбцы таблицы: исходные данные, ƒx-столбцы, пустые столбцы с ячейками
+ *   ├─ studies: Study[]            — исследования (КВД_1, КСД_2 …)
+ *   │    ├─ columns: Column[]      — таблица давления: время, давление, ƒx-столбцы, пустые столбцы
+ *   │    └─ rateColumns: Column[]  — таблица дебитов (история режимов): время начала режима, дебит
  *   ├─ charts: ChartDef[]          — графики; каждый принадлежит исследованию (studyId)
  *   │    └─ lines: LineDef[]       — прямые (по 2 точкам и линии тренда) в координатах осей
  *   ├─ groups: StudyGroup[]        — группы исследований для калькулятора
@@ -40,16 +41,23 @@ export interface Column {
 /** Тип исследования — влияет на расчёт Δp и суперпозиции. */
 export type TestType = "buildup" | "drawdown";
 
+/** Какая таблица исследования: давление или дебиты. */
+export type TablePart = "p" | "q";
+
 export interface Study {
   id: string;
   name: string;
+  /** Таблица давления. */
   columns: Column[];
-  /** Какие столбцы считаются временем, давлением и дебитом. */
+  /** Какие столбцы таблицы давления считаются временем, давлением и (устар.) дебитом. */
   roles: { time?: string; pressure?: string; rate?: string };
+  /** Таблица дебитов: каждая строка — режим, время в ней — начало режима. */
+  rateColumns: Column[];
+  rateRoles: { time?: string; rate?: string };
   testType: TestType;
-  /** Время работы до остановки tp, с (для КВД: Хорнер, Агарвал, мультирежим). */
+  /** Время работы до остановки tp, с — используется, только если таблица дебитов пуста. */
   tpSeconds: number;
-  /** Дебит до остановки, м³/с (для КВД). */
+  /** Дебит до остановки, м³/с — используется, только если таблица дебитов пуста. */
   rateBeforeM3s: number;
 }
 
@@ -58,7 +66,7 @@ export type TimeFn = "dt" | "log" | "sqrt" | "qrt" | "invsqrt";
 /** Способ суперпозиции. */
 export type Superposition = "none" | "buildup" | "multirate" | "agarwal";
 
-export type ChartKind = "loglog" | "semilog" | "history" | "flex" | "columns";
+export type ChartKind = "loglog" | "semilog" | "history" | "rates" | "flex" | "columns";
 
 /** Вид линии тренда. "axis" — прямая в текущих осях (наклон на log-log = показатель степени). */
 export type FitType = "axis" | "linear" | "power" | "log" | "exp" | "poly";
@@ -136,7 +144,7 @@ export interface ChartDef {
   rect: WindowRect;
 }
 
-export type Marker = "cross" | "circle" | "dot" | "line";
+export type Marker = "cross" | "circle" | "dot" | "line" | "step";
 
 export interface StudyGroup {
   id: string;

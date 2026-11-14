@@ -12,6 +12,7 @@ import { lineStats, makeTrend } from "./trend";
 import { fmt, FIT_LABELS } from "../core/regression";
 import type { FitType } from "../core/types";
 import { toSI } from "../core/units";
+import { representativeRate } from "../core/welltest";
 import { Icon } from "../ui/icons";
 
 export function LineInfo() {
@@ -121,7 +122,7 @@ export function LineInfo() {
           className="btn violet"
           onClick={() => {
             const calc = useApp.getState().project.calc;
-            const prev = calc.perStudy[study.id] ?? { rate_m3_s: study.rateBeforeM3s, porosity: 0.13, invariant_Pa_s05: 0 };
+            const prev = calc.perStudy[study.id] ?? { rate_m3_s: representativeRate(study), porosity: 0.13, invariant_Pa_s05: 0 };
             st.updateCalc({
               perStudy: { ...calc.perStudy, [study.id]: { ...prev, invariant_Pa_s05: toSI(Math.abs(stats.slope ?? 0), "invariant", "atm/h05") } },
             });

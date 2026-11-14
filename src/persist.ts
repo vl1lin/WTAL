@@ -22,23 +22,25 @@ const fluid = z.object({
   density_kg_m3: z.number(),
 });
 
+const columnSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  quantity: z.enum(["time", "datetime", "pressure", "rate", "temperature", "dimensionless", "other"]),
+  unit: z.string(),
+  cells: z.array(z.string()),
+  formula: z.string().optional(),
+});
+
 const projectSchema = z.object({
   version: z.literal(1),
   studies: z.array(
     z.object({
       id: z.string(),
       name: z.string(),
-      columns: z.array(
-        z.object({
-          id: z.string(),
-          name: z.string(),
-          quantity: z.enum(["time", "datetime", "pressure", "rate", "temperature", "dimensionless", "other"]),
-          unit: z.string(),
-          cells: z.array(z.string()),
-          formula: z.string().optional(),
-        }),
-      ),
+      columns: z.array(columnSchema),
       roles: z.object({ time: z.string().optional(), pressure: z.string().optional(), rate: z.string().optional() }),
+      rateColumns: z.array(columnSchema).default([]),
+      rateRoles: z.object({ time: z.string().optional(), rate: z.string().optional() }).default({}),
       testType: z.enum(["buildup", "drawdown"]),
       tpSeconds: z.number(),
       rateBeforeM3s: z.number(),
@@ -49,7 +51,7 @@ const projectSchema = z.object({
       id: z.string(),
       studyId: z.string(),
       name: z.string(),
-      kind: z.enum(["loglog", "semilog", "history", "flex", "columns"]),
+      kind: z.enum(["loglog", "semilog", "history", "rates", "flex", "columns"]),
       xLog: z.boolean(),
       yLog: z.boolean(),
       theme: z.enum(["dark", "light"]),
@@ -61,7 +63,7 @@ const projectSchema = z.object({
       derivL: z.number(),
       xColumn: z.string().optional(),
       yColumns: z
-        .array(z.object({ columnId: z.string(), color: z.string(), marker: z.enum(["cross", "circle", "dot", "line"]) }))
+        .array(z.object({ columnId: z.string(), color: z.string(), marker: z.enum(["cross", "circle", "dot", "line", "step"]) }))
         .optional(),
       rows: z.array(z.number()).optional(),
       overlayStudyIds: z.array(z.string()).optional(),

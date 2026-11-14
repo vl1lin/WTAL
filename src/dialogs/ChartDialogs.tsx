@@ -20,6 +20,7 @@ import { makeTrend, lineStats } from "../charts/trend";
 import { fmt, FIT_LABELS } from "../core/regression";
 import { autoView, fromAxis, toAxis } from "../charts/geometry";
 import { toSI } from "../core/units";
+import { representativeRate } from "../core/welltest";
 
 const TIME_FNS: [TimeFn, string, string][] = [
   ["dt", "Δt", ""],
@@ -190,7 +191,7 @@ export function FlexDialog({ rows }: { rows?: number[] }) {
   const toCalc = (): void => {
     if (slope === undefined || !study) return;
     const calc = useApp.getState().project.calc;
-    const prev = calc.perStudy[study.id] ?? { rate_m3_s: study.rateBeforeM3s, porosity: 0.13, invariant_Pa_s05: 0 };
+    const prev = calc.perStudy[study.id] ?? { rate_m3_s: representativeRate(study), porosity: 0.13, invariant_Pa_s05: 0 };
     st.updateCalc({ perStudy: { ...calc.perStudy, [study.id]: { ...prev, invariant_Pa_s05: toSI(Math.abs(slope), "invariant", "atm/h05") } } });
     alert(`Инварианта m = ${fmt(Math.abs(slope), 5)} атм/ч^0.5 передана в калькулятор (${study.name})`);
   };

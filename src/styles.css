@@ -255,6 +255,9 @@ select.unit { min-width: 84px; max-width: 130px; flex: 0 0 auto; }
 .th-u { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 .calc-table td .input.num { min-width: 90px; }
 
+.small-seg button { padding: 3px 10px; font-size: 12px; }
+.empty-table { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 20px; }
+.empty-table p { margin: 0; line-height: 1.5; }
 .statusbar { display: flex; gap: 20px; padding: 4px 14px; background: #f1f5f9; border-top: 1px solid var(--line); font-size: 11.5px; color: #334155; flex: 0 0 auto; }
 .welcome { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px; text-align: center; }
 .welcome h1 { margin: 0; font-size: 24px; }

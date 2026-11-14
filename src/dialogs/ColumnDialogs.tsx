@@ -9,10 +9,13 @@
 import { useMemo, useRef, useState } from "react";
 import { useApp } from "../store";
 import { Modal, NumInput, UnitSelect } from "./common";
-import type { Column, Quantity, Study, TestType } from "../core/types";
+import type { Column, Quantity, Study, TablePart, TestType } from "../core/types";
 import { computeSheet } from "../core/sheet";
 import { dimensionOfQuantity, fromSI, toSI, UNITS } from "../core/units";
 import { colLetter } from "../core/formula";
+import { baseData, producingTime, rateEvents } from "../core/welltest";
+import { sheetOf } from "../charts/series";
+import { fmt } from "../core/regression";
 
 const QUANTITIES: [Quantity, string][] = [
   ["time", "Время / функция времени"],
@@ -70,7 +73,9 @@ export function NewColumnDialog() {
   const [unit, setUnit] = useState("-");
   const [formula, setFormula] = useState("= SQRT([Время])");
   const ta = useRef<HTMLTextAreaElement>(null);
-  const check = useMemo(() => (study ? checkFormula(study, formula) : { ok: 0, err: null }), [study, formula]);
+  const part = useApp((s) => s.tablePart);
+  const tableStudy = useMemo(() => (study && part === "q" ? { ...study, columns: study.rateColumns } : study), [study, part]);
+  const check = useMemo(() => (tableStudy ? checkFormula(tableStudy, formula) : { ok: 0, err: null }), [tableStudy, formula]);
   if (!study) return null;
   const insert = (s: string): void => {
     const el = ta.current;
@@ -93,7 +98,7 @@ export function NewColumnDialog() {
             className="btn violet"
             disabled={!formula.trim().startsWith("=")}
             onClick={() => {
-              st.addColumn(study.id, { name: name.trim() || "ƒx", quantity, unit, formula: formula.trim() });
+              st.addColumn(study.id, { name: name.trim() || "ƒx", quantity, unit, formula: formula.trim() }, undefined, part);
               st.setDialog(null);
             }}
           >
@@ -119,7 +124,7 @@ export function NewColumnDialog() {
         </label>
         <div className="row gap wrap small">
           <span className="muted">Вставить столбец:</span>
-          {study.columns.map((c, i) => (
+          {(tableStudy?.columns ?? []).map((c, i) => (
             <button key={c.id} type="button" className="chip-btn mono" title={`Столбец ${colLetter(i)}`} onClick={() => insert(`[${c.name}]`)}>[{c.name}]</button>
           ))}
         </div>
@@ -149,35 +154,52 @@ export function NewColumnDialog() {
   );
 }
 
-export function ColumnPropsDialog({ columnId }: { columnId: string }) {
+export function ColumnPropsDialog({ columnId, part }: { columnId: string; part: TablePart }) {
   const st = useApp.getState();
   const studyId = useApp((s) => s.activeStudyId) ?? "";
   const study = useApp((s) => s.project.studies.find((x) => x.id === studyId));
-  const col = study?.columns.find((c) => c.id === columnId);
+  const cols = study ? (part === "q" ? study.rateColumns : study.columns) : [];
+  const col = cols.find((c) => c.id === columnId);
   const [c, setC] = useState<Column | undefined>(col);
-  const roleNow = (): string => (!study ? "" : study.roles.time === columnId ? "time" : study.roles.pressure === columnId ? "pressure" : study.roles.rate === columnId ? "rate" : "");
+  const roleNow = (): string => {
+    if (!study) return "";
+    if (part === "q") return study.rateRoles.time === columnId ? "time" : study.rateRoles.rate === columnId ? "rate" : "";
+    return study.roles.time === columnId ? "time" : study.roles.pressure === columnId ? "pressure" : study.roles.rate === columnId ? "rate" : "";
+  };
   const [role, setRole] = useState(roleNow());
-  const check = useMemo(() => (study && c?.formula ? checkFormula(study, c.formula) : null), [study, c?.formula]);
+  const check = useMemo(
+    () => (study && c?.formula ? checkFormula(part === "q" ? { ...study, columns: study.rateColumns } : study, c.formula) : null),
+    [study, c?.formula, part],
+  );
   if (!study || !c) return null;
   const save = (): void => {
-    st.updateColumn(study.id, c.id, { name: c.name, quantity: c.quantity, unit: c.unit, formula: c.formula?.trim() ? c.formula.trim() : undefined });
-    const roles = { ...study.roles };
-    (["time", "pressure", "rate"] as const).forEach((k) => {
-      if (roles[k] === c.id) delete roles[k];
-    });
-    if (role === "time" || role === "pressure" || role === "rate") roles[role] = c.id;
-    st.updateStudy(study.id, { roles });
+    st.updateColumn(study.id, c.id, { name: c.name, quantity: c.quantity, unit: c.unit, formula: c.formula?.trim() ? c.formula.trim() : undefined }, part);
+    if (part === "q") {
+      const rateRoles = { ...study.rateRoles };
+      (["time", "rate"] as const).forEach((k) => {
+        if (rateRoles[k] === c.id) delete rateRoles[k];
+      });
+      if (role === "time" || role === "rate") rateRoles[role] = c.id;
+      st.updateStudy(study.id, { rateRoles });
+    } else {
+      const roles = { ...study.roles };
+      (["time", "pressure", "rate"] as const).forEach((k) => {
+        if (roles[k] === c.id) delete roles[k];
+      });
+      if (role === "time" || role === "pressure" || role === "rate") roles[role] = c.id;
+      st.updateStudy(study.id, { roles });
+    }
     st.setDialog(null);
   };
   return (
     <Modal
       title="Свойства столбца"
-      sub={`${study.name} · ${colLetter(study.columns.indexOf(col ?? c))}`}
+      sub={`${study.name} · ${part === "q" ? "дебиты" : "давление"} · ${colLetter(cols.indexOf(col ?? c))}`}
       width={620}
       onClose={() => st.setDialog(null)}
       footer={
         <>
-          <button type="button" className="btn danger" onClick={() => { if (confirm(`Удалить столбец «${c.name}»?`)) { st.removeColumn(study.id, c.id); st.setDialog(null); } }}>Удалить столбец</button>
+          <button type="button" className="btn danger" onClick={() => { if (confirm(`Удалить столбец «${c.name}»?`)) { st.removeColumn(study.id, c.id, part); st.setDialog(null); } }}>Удалить столбец</button>
           <span className="grow" />
           <button type="button" className="btn" onClick={() => st.setDialog(null)}>Отмена</button>
           <button type="button" className="btn primary" onClick={save}>Сохранить</button>
@@ -199,8 +221,8 @@ export function ColumnPropsDialog({ columnId }: { columnId: string }) {
           Роль в расчётах ГДИС
           <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
             <option value="">— нет —</option>
-            <option value="time">Время (ось Δt)</option>
-            <option value="pressure">Давление</option>
+            <option value="time">{part === "q" ? "Время начала режима" : "Время (ось Δt)"}</option>
+            {part === "p" && <option value="pressure">Давление</option>}
             <option value="rate">Дебит</option>
           </select>
         </label>
@@ -219,7 +241,22 @@ export function StudyDialog({ studyId }: { studyId: string }) {
   const st = useApp.getState();
   const study = useApp((s) => s.project.studies.find((x) => x.id === studyId));
   const [s, setS] = useState<Study | undefined>(study);
-  if (!study || !s) return null;
+  const info = useMemo(() => {
+    if (!study) return null;
+    const b = baseData(study, sheetOf(study));
+    const ev = rateEvents(study, b);
+    return { b, tp: producingTime(study, ev, b), hasTable: b.rates !== null && b.rates.length > 0 };
+  }, [study]);
+  if (!study || !s || !info) return null;
+  const rateRoleSel = (k: "time" | "rate", label: string) => (
+    <label className="lbl">
+      {label}
+      <select className="input" value={s.rateRoles[k] ?? ""} onChange={(e) => setS({ ...s, rateRoles: { ...s.rateRoles, [k]: e.target.value || undefined } })}>
+        <option value="">— нет —</option>
+        {s.rateColumns.map((c, i) => <option key={c.id} value={c.id}>{colLetter(i)} — {c.name}</option>)}
+      </select>
+    </label>
+  );
   const roleSel = (k: "time" | "pressure" | "rate", label: string) => (
     <label className="lbl">
       {label}
@@ -240,7 +277,7 @@ export function StudyDialog({ studyId }: { studyId: string }) {
           <button type="button" className="btn danger" onClick={() => { if (confirm(`Удалить исследование «${study.name}» вместе с его графиками?`)) { st.removeStudy(study.id); st.setDialog(null); } }}>Удалить исследование</button>
           <span className="grow" />
           <button type="button" className="btn" onClick={() => st.setDialog(null)}>Отмена</button>
-          <button type="button" className="btn primary" onClick={() => { st.updateStudy(study.id, { name: s.name, testType: s.testType, tpSeconds: s.tpSeconds, rateBeforeM3s: s.rateBeforeM3s, roles: s.roles }); st.setDialog(null); }}>Сохранить</button>
+          <button type="button" className="btn primary" onClick={() => { st.updateStudy(study.id, { name: s.name, testType: s.testType, tpSeconds: s.tpSeconds, rateBeforeM3s: s.rateBeforeM3s, roles: s.roles, rateRoles: s.rateRoles }); st.setDialog(null); }}>Сохранить</button>
         </>
       }
     >
@@ -254,16 +291,37 @@ export function StudyDialog({ studyId }: { studyId: string }) {
               <option value="drawdown">КСД / падение: Δp = p₀ − p</option>
             </select>
           </label>
-          <label className="lbl">Время работы до остановки tp, ч<NumInput label="tp" value={s.tpSeconds / 3600} onChange={(v) => setS({ ...s, tpSeconds: v * 3600 })} /></label>
-          <label className="lbl">Дебит до остановки, м³/сут<NumInput label="Дебит до остановки" value={fromSI(s.rateBeforeM3s, "rate", "m3/d")} onChange={(v) => setS({ ...s, rateBeforeM3s: toSI(v, "rate", "m3/d") })} /></label>
         </div>
-        <b className="small">Столбцы для расчётов</b>
-        <div className="three-col">
+        <b className="small">Таблица давления</b>
+        <div className="two-col">
           {roleSel("time", "Время")}
           {roleSel("pressure", "Давление")}
-          {roleSel("rate", "Дебит")}
         </div>
-        <div className="hint-box small">Время отсчитывается от первой строки с временем и давлением. Столбец «Дата и время» тоже можно назначить временем.</div>
+        <b className="small">Таблица дебитов (история режимов)</b>
+        <div className="two-col">
+          {rateRoleSel("time", "Время начала режима")}
+          {rateRoleSel("rate", "Дебит")}
+        </div>
+        {info.hasTable ? (
+          <div className="banner blue small">
+            Начало анализируемого периода — последнее изменение дебита: {fmt(info.b.tStart_s / 3600, 6)} ч от начала записи давления.
+            Время работы до него tp = {fmt(info.tp / 3600, 6)} ч.
+          </div>
+        ) : (
+          <>
+            <div className="banner warn small">
+              Таблица дебитов пуста — Δt отсчитывается от первой строки давления, а для суперпозиции используются поля ниже.
+            </div>
+            <div className="two-col">
+              <label className="lbl">Время работы до остановки tp, ч<NumInput label="tp" value={s.tpSeconds / 3600} onChange={(v) => setS({ ...s, tpSeconds: v * 3600 })} /></label>
+              <label className="lbl">Дебит до остановки, м³/сут<NumInput label="Дебит до остановки" value={fromSI(s.rateBeforeM3s, "rate", "m3/d")} onChange={(v) => setS({ ...s, rateBeforeM3s: toSI(v, "rate", "m3/d") })} /></label>
+            </div>
+            <div className="row gap small">
+              {roleSel("rate", "Дебит в таблице давления (устар.)")}
+            </div>
+          </>
+        )}
+        {info.b.warning && <div className="banner warn small">{info.b.warning}</div>}
       </div>
     </Modal>
   );

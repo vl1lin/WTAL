@@ -12,13 +12,17 @@
  *   │            Delete — очистить, Ctrl+C/V — копировать/вставить, Ctrl+D и маркер — заполнить вниз
  *   └─ меню ПКМ: заполнить, копировать, вставить, очистить, вставить столбец/строку, свойства
  *
- * Выделение строк (несколько строк диапазона или номера строк) синхронизируется с графиками.
+ * Переключатель «Давление | Дебиты» открывает одну из двух таблиц исследования (part = "p" | "q").
+ * Выделение строк таблицы давления (несколько строк диапазона или номера строк) синхронизируется с графиками.
  * Сортировка — только порядок отображения: строки неразрывны, данные и формулы не переставляются.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Study } from "../core/types";
 import { useApp } from "../store";
 import { sheetOf } from "../charts/series";
+import { rateSheetOf } from "../core/welltest";
+import type { TablePart } from "../core/types";
+import { uid } from "../core/factory";
 import { colLetter, shiftFormula } from "../core/formula";
 import { dimensionOfQuantity, unitLabel } from "../core/units";
 
@@ -31,11 +35,15 @@ interface Cell {
   r: number;
 }
 
-export function DataTable({ study }: { study: Study }) {
+export function DataTable({ study, part }: { study: Study; part: TablePart }) {
   const st = useApp.getState();
-  const selRows = useApp((s) => s.selection[study.id]);
-  const sheet = sheetOf(study);
-  const nCols = study.columns.length;
+  const isP = part === "p";
+  // Выделение строк связано с графиками только для таблицы давления.
+  const selKey = isP ? study.id : `${study.id}:q`;
+  const selRows = useApp((s) => s.selection[selKey]);
+  const sheet = isP ? sheetOf(study) : rateSheetOf(study);
+  const columns = isP ? study.columns : study.rateColumns;
+  const nCols = columns.length;
   const nRows = Math.max(sheet.rowCount, 1);
   const [active, setActive] = useState<Cell>({ c: 0, r: 0 });
   const [anchor, setAnchor] = useState<Cell>({ c: 0, r: 0 });
@@ -52,7 +60,7 @@ export function DataTable({ study }: { study: Study }) {
   const order = useMemo(() => {
     const idx = Array.from({ length: nRows }, (_, i) => i);
     if (!sort) return idx;
-    const col = study.columns[sort.col];
+    const col = columns[sort.col];
     if (!col) return idx;
     const v = sheet.numeric(col.id);
     return idx.sort((a, b) => {
@@ -63,7 +71,7 @@ export function DataTable({ study }: { study: Study }) {
       if (Number.isNaN(vb)) return -1;
       return (va - vb) * sort.dir || a - b;
     });
-  }, [nRows, sort, study.columns, sheet]);
+  }, [nRows, sort, columns, sheet]);
   const realRow = (d: number): number => order[d] ?? d;
 
   const selected = useMemo(() => new Set(selRows ?? []), [selRows]);
@@ -92,9 +100,9 @@ export function DataTable({ study }: { study: Study }) {
   const first = Math.max(0, Math.floor(scroll.top / ROW_H) - 5);
   const last = Math.min(nRows - 1, Math.ceil((scroll.top + scroll.h) / ROW_H) + 5);
 
-  const rawAt = (c: number, d: number): string => study.columns[c]?.cells[realRow(d)] ?? "";
+  const rawAt = (c: number, d: number): string => columns[c]?.cells[realRow(d)] ?? "";
   const activeRaw = rawAt(active.c, active.r);
-  const activeCol = study.columns[active.c];
+  const activeCol = columns[active.c];
   const shownRaw = activeRaw === "" && activeCol?.formula ? activeCol.formula : activeRaw;
 
   /** Синхронизировать выделение строк с графиками. */
@@ -103,7 +111,7 @@ export function DataTable({ study }: { study: Study }) {
     const hi = Math.max(a, b);
     const rows: number[] = [];
     for (let d = lo; d <= hi; d++) rows.push(realRow(d));
-    st.setSelection(study.id, rows);
+    st.setSelection(selKey, rows);
   };
 
   const move = (dc: number, dr: number, extend: boolean): void => {
@@ -122,7 +130,7 @@ export function DataTable({ study }: { study: Study }) {
   };
 
   const commit = (value: string, c = active.c, d = active.r): void => {
-    st.setCell(study.id, c, realRow(d), value.trim() === "" ? "" : value);
+    st.setCell(study.id, c, realRow(d), value.trim() === "" ? "" : value, part);
   };
 
   /** Заполнить вниз: первая строка диапазона копируется в остальные со сдвигом ссылок. */
@@ -133,16 +141,16 @@ export function DataTable({ study }: { study: Study }) {
     }
     const upd: { col: number; row: number; value: string }[] = [];
     for (let c = c0; c <= c1; c++) {
-      const src = study.columns[c]?.cells[r0] ?? "";
+      const src = columns[c]?.cells[r0] ?? "";
       for (let r = r0 + 1; r <= toD; r++) upd.push({ col: c, row: r, value: shiftFormula(src, r - r0, 0) });
     }
-    st.setCells(study.id, upd);
+    st.setCells(study.id, upd, part);
   };
 
   const clearRange = (): void => {
     const upd: { col: number; row: number; value: string }[] = [];
     for (let c = c0; c <= c1; c++) for (let d = r0; d <= r1; d++) upd.push({ col: c, row: realRow(d), value: "" });
-    st.setCells(study.id, upd);
+    st.setCells(study.id, upd, part);
   };
 
   const copyRange = (): string => {
@@ -168,7 +176,7 @@ export function DataTable({ study }: { study: Study }) {
         upd.push({ col: c, row, value: v });
       });
     });
-    st.setCells(study.id, upd);
+    st.setCells(study.id, upd, part);
   };
 
   const onKey = (e: React.KeyboardEvent): void => {
@@ -295,6 +303,7 @@ export function DataTable({ study }: { study: Study }) {
   };
 
   const roleOf = (id: string): string => {
+    if (!isP) return study.rateRoles.time === id ? "t" : study.rateRoles.rate === id ? "q" : "";
     const r = study.roles;
     return r.time === id ? "t" : r.pressure === id ? "P" : r.rate === id ? "q" : "";
   };
@@ -302,13 +311,55 @@ export function DataTable({ study }: { study: Study }) {
   const rowsShown: number[] = [];
   for (let d = first; d <= last; d++) rowsShown.push(d);
 
+  if (!isP && nCols === 0) {
+    return (
+      <div className="table-panel">
+        <div className="table-toolbar">
+          <div role="tablist" aria-label="Таблица" className="seg small-seg">
+            <button type="button" role="tab" aria-selected={false} onClick={() => st.setTablePart("p")}>Давление</button>
+            <button type="button" role="tab" aria-selected className="on">Дебиты</button>
+          </div>
+        </div>
+        <div className="empty-table">
+          <b>Истории дебитов пока нет</b>
+          <p className="muted small">
+            Каждая строка — режим: время его начала и дебит. По ней считаются Δt (от последнего изменения дебита),
+            суперпозиция и нормировка Δp/Δq. Время — датой или числом в той же шкале, что и время давления.
+          </p>
+          <button type="button" className="btn primary" onClick={() => st.setDialog({ kind: "import", part: "q" })}>
+            Загрузить дебиты
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() =>
+              st.replaceTable(study.id, "q", [
+                { id: uid(), name: "Начало режима", quantity: "time", unit: "h", cells: new Array<string>(10).fill("") },
+                { id: uid(), name: "Дебит", quantity: "rate", unit: "m3/d", cells: new Array<string>(10).fill("") },
+              ])
+            }
+          >
+            Ввести вручную
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="table-panel" onContextMenu={(e) => e.preventDefault()}>
       <div className="table-toolbar">
-        <b>Данные: {study.name}</b>
-        <span className="muted small">{sheet.rowCount} строк</span>
+        <div role="tablist" aria-label="Таблица" className="seg small-seg">
+          <button type="button" role="tab" aria-selected={isP} className={isP ? "on" : ""} onClick={() => st.setTablePart("p")}>
+            Давление
+          </button>
+          <button type="button" role="tab" aria-selected={!isP} className={!isP ? "on" : ""} onClick={() => st.setTablePart("q")}>
+            Дебиты{study.rateColumns.length > 0 ? ` (${sheet.rowCount})` : ""}
+          </button>
+        </div>
+        <span className="muted small">{isP ? `${sheet.rowCount} строк` : "время = начало режима"}</span>
         {selected.size > 0 && (
-          <button type="button" className="badge yellow" title="Снять выделение" onClick={() => st.setSelection(study.id, [])}>
+          <button type="button" className="badge yellow" title="Снять выделение" onClick={() => st.setSelection(selKey, [])}>
             Выделено: {selected.size} ✕
           </button>
         )}
@@ -379,7 +430,7 @@ export function DataTable({ study }: { study: Study }) {
           <thead>
             <tr className="letters">
               <th style={{ width: HEAD_W }} />
-              {study.columns.map((c, i) => (
+              {columns.map((c, i) => (
                 <th key={c.id} style={{ width: COL_W }} className={i >= c0 && i <= c1 ? "hl" : ""}>
                   {colLetter(i)}
                 </th>
@@ -388,7 +439,7 @@ export function DataTable({ study }: { study: Study }) {
             </tr>
             <tr className="names">
               <th />
-              {study.columns.map((c, i) => {
+              {columns.map((c, i) => {
                 const fx = Boolean(c.formula);
                 const role = roleOf(c.id);
                 const unit = unitLabel(dimensionOfQuantity(c.quantity), c.unit);
@@ -398,7 +449,7 @@ export function DataTable({ study }: { study: Study }) {
                     className={fx ? "fxcol" : ""}
                     title="Клик — сортировка, двойной клик — свойства столбца"
                     onClick={() => sortBy(i)}
-                    onDoubleClick={() => st.setDialog({ kind: "columnProps", columnId: c.id })}
+                    onDoubleClick={() => st.setDialog({ kind: "columnProps", columnId: c.id, part })}
                     onContextMenu={(e) => {
                       e.stopPropagation();
                       e.preventDefault();
@@ -421,7 +472,7 @@ export function DataTable({ study }: { study: Study }) {
                   className="add-col"
                   aria-label="Добавить пустой столбец"
                   title="Добавить пустой столбец"
-                  onClick={() => st.addColumn(study.id, { name: `Столбец ${colLetter(nCols)}` })}
+                  onClick={() => st.addColumn(study.id, { name: `Столбец ${colLetter(nCols)}` }, undefined, part)}
                 >
                   +
                 </button>
@@ -438,7 +489,7 @@ export function DataTable({ study }: { study: Study }) {
                   <th data-rowhead={d} className={d >= r0 && d <= r1 ? "hl" : ""}>
                     {r + 1}
                   </th>
-                  {study.columns.map((c, ci) => {
+                  {columns.map((c, ci) => {
                     const isActive = ci === active.c && d === active.r;
                     const inR = inRange(ci, d);
                     const err = sheet.errorAt(ci, r);
@@ -489,15 +540,17 @@ export function DataTable({ study }: { study: Study }) {
             ["Вставить", "Ctrl+V", () => void navigator.clipboard?.readText().then(pasteText).catch(() => alert("Нажмите Ctrl+V в таблице"))],
             ["Очистить", "Del", clearRange],
             null,
-            ["Вставить столбец слева", "", () => st.addColumn(study.id, { name: `Столбец ${colLetter(nCols)}` }, menu.col)],
-            ["Вставить столбец справа", "", () => st.addColumn(study.id, { name: `Столбец ${colLetter(nCols)}` }, menu.col + 1)],
-            ["Вставить строку выше", "", () => (sort ? alert("Снимите сортировку") : st.insertRow(study.id, realRow(active.r)))],
+            ["Вставить столбец слева", "", () => st.addColumn(study.id, { name: `Столбец ${colLetter(nCols)}` }, menu.col, part)],
+            ["Вставить столбец справа", "", () => st.addColumn(study.id, { name: `Столбец ${colLetter(nCols)}` }, menu.col + 1, part)],
+            ["Вставить строку выше", "", () => (sort ? alert("Снимите сортировку") : st.insertRow(study.id, realRow(active.r), part))],
             null,
             ["Свойства столбца…", "", () => {
-              const col = study.columns[menu.col];
-              if (col) st.setDialog({ kind: "columnProps", columnId: col.id });
+              const col = columns[menu.col];
+              if (col) st.setDialog({ kind: "columnProps", columnId: col.id, part });
             }],
-            ["Построить график по выделенным строкам…", "", () => st.setDialog({ kind: "flex", rows: useApp.getState().selection[study.id] ?? [] })],
+            ...(isP
+              ? ([["Построить график по выделенным строкам…", "", () => st.setDialog({ kind: "flex", rows: useApp.getState().selection[study.id] ?? [] })]] as MenuItem[])
+              : []),
           ]}
         />
       )}

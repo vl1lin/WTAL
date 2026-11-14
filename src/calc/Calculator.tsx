@@ -17,6 +17,7 @@ import { fromSI, toSI, type Dimension } from "../core/units";
 import { fmt } from "../core/regression";
 import { lineStats } from "../charts/trend";
 import { buildChartData } from "../charts/series";
+import { representativeRate } from "../core/welltest";
 
 const DEFAULT_UNITS: Record<string, string> = {
   h: "m",
@@ -43,7 +44,7 @@ export function Calculator() {
   const set = (p: Partial<CalcState>): void => st.updateCalc(p);
   const mx = mixture(calc);
 
-  const perStudy = (s: Study) => calc.perStudy[s.id] ?? { rate_m3_s: s.rateBeforeM3s, porosity: 0.13, invariant_Pa_s05: Number.NaN };
+  const perStudy = (s: Study) => calc.perStudy[s.id] ?? { rate_m3_s: representativeRate(s), porosity: 0.13, invariant_Pa_s05: Number.NaN };
   const setPer = (s: Study, patch: Partial<CalcState["perStudy"][string]>): void =>
     set({ perStudy: { ...calc.perStudy, [s.id]: { ...perStudy(s), ...patch } } });
 

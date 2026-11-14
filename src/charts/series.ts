@@ -5,7 +5,8 @@
  *   ChartDef + Study + Sheet ──buildChartData()──► ChartData { series[], xLabel, yLabel }
  *     loglog  : Δt — Δp и производная Бурде (опц. наложение других исследований)
  *     semilog : функция суперпозиции log — давление
- *     history : Δt — давление
+ *     history : время от начала записи — давление
+ *     rates   : история дебитов (ступенчатый график) из таблицы дебитов
  *     flex    : f(Δt) с суперпозицией — P или Δp (опц. нормировка на дебит)
  *     columns : столбец X — столбцы Y (как есть, в единицах столбцов)
  *
@@ -18,6 +19,8 @@ import {
   bourdetDerivative,
   deltaP,
   lastRateStep,
+  producingTime,
+  rateTable,
   lnSuperposition,
   rateEvents,
   superposedTime,
@@ -104,6 +107,7 @@ function loglogSeries(chart: ChartDef, study: Study, colors: [string, string], s
   const b = baseData(study, sheet);
   const dp = deltaP(study, b);
   const ev = rateEvents(study, b);
+  const tp = producingTime(study, ev, b);
   const dq = chart.normalizeByRate ? lastRateStep(ev) : Number.NaN;
   const rowsAllowed = chart.rows && chart.studyId === study.id ? new Set(chart.rows) : null;
   const xs: number[] = [];
@@ -113,10 +117,10 @@ function loglogSeries(chart: ChartDef, study: Study, colors: [string, string], s
   b.dt_s.forEach((t, i) => {
     const row = b.rows[i] ?? -1;
     if (t <= 0 || (rowsAllowed && !rowsAllowed.has(row))) return;
-    xs.push(lnSuperposition(chart.superposition, t, study.tpSeconds, ev));
+    xs.push(lnSuperposition(chart.superposition, t, tp, ev));
     ys.push(dp[i] ?? Number.NaN);
     rows.push(row);
-    const te = chart.superposition === "agarwal" && study.tpSeconds > 0 ? (study.tpSeconds * t) / (study.tpSeconds + t) : t;
+    const te = chart.superposition === "agarwal" && tp > 0 ? (tp * t) / (tp + t) : t;
     xPlot.push(te / 3600);
   });
   // Производная считается по возрастанию аргумента суперпозиции.
@@ -181,6 +185,24 @@ export function buildChartData(chart: ChartDef, project: Project): ChartData {
   }
 
   const b = baseData(study, sheet);
+
+  if (chart.kind === "rates") {
+    // Ступенчатый график режимов; шкала времени — от первой строки давления (или первого режима).
+    const rt = rateTable(study);
+    if (!rt) return { series: [], xLabel: "", yLabel: "", warning: "Таблица дебитов пуста — загрузите дебиты" };
+    const rel = b.rates ?? rt.rows.map((r) => ({ t_s: r.tAbs_s - (rt.rows[0]?.tAbs_s ?? 0), q_m3_s: r.q_m3_s }));
+    const pts: SeriesPoint[] = rel.map((r, i) => ({ x: r.t_s / 3600, y: fromSI(r.q_m3_s, "rate", "m3/d"), row: i }));
+    const lastP = b.hist_s[b.hist_s.length - 1] ?? 0;
+    const lastR = rel[rel.length - 1];
+    if (lastR) pts.push({ x: Math.max(lastP, lastR.t_s) / 3600 + 1e-9, y: fromSI(lastR.q_m3_s, "rate", "m3/d"), row: -1 });
+    return {
+      series: [{ key: `q:${study.id}`, name: "q", color: "#FB923C", marker: "step", studyId: `${study.id}:q`, points: pts }],
+      xLabel: b.rows.length > 0 ? "Время от начала записи давления, ч" : "Время от первого режима, ч",
+      yLabel: "q, м³/сут",
+      warning: b.warning,
+    };
+  }
+
   if (b.rows.length === 0) {
     return { series: [], xLabel: "", yLabel: "", warning: "Назначьте столбцы времени и давления (меню исследования)" };
   }
@@ -199,20 +221,22 @@ export function buildChartData(chart: ChartDef, project: Project): ChartData {
 
   if (chart.kind === "history") {
     const pts: SeriesPoint[] = [];
-    b.dt_s.forEach((t, i) => {
+    b.hist_s.forEach((t, i) => {
       const row = b.rows[i] ?? -1;
       if (rowsAllowed && !rowsAllowed.has(row)) return;
       pts.push({ x: t / 3600, y: fromSI(b.p_Pa[i] ?? Number.NaN, "pressure", "atm"), row });
     });
     return {
       series: [{ key: `p:${study.id}`, name: "P", color: COLORS.history, marker: "dot", studyId: study.id, points: pts }],
-      xLabel: "Время, ч",
+      xLabel: "Время от начала записи, ч",
       yLabel: "P, атм",
+      warning: b.warning,
     };
   }
 
   // semilog и flex
   const ev = rateEvents(study, b);
+  const tp = producingTime(study, ev, b);
   const fn: TimeFn = chart.kind === "semilog" ? "log" : chart.timeFn;
   const useDp = chart.yFn === "dp";
   const dp = deltaP(study, b);
@@ -221,7 +245,7 @@ export function buildChartData(chart: ChartDef, project: Project): ChartData {
   b.dt_s.forEach((t, i) => {
     const row = b.rows[i] ?? -1;
     if (rowsAllowed && !rowsAllowed.has(row)) return;
-    const x = superposedTime(fn, chart.superposition, t, study.tpSeconds, ev);
+    const x = superposedTime(fn, chart.superposition, t, tp, ev);
     const yPa = useDp ? (dp[i] ?? Number.NaN) : (b.p_Pa[i] ?? Number.NaN);
     const y = pressureOut(yPa, dq);
     if (Number.isFinite(x) && Number.isFinite(y)) pts.push({ x, y, row });

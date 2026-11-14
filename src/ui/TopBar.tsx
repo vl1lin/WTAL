@@ -86,7 +86,7 @@ export function TopBar() {
         </div>
         <span className="grow" />
         <ProjectMenu />
-        <button type="button" className="btn primary" onClick={() => st.setDialog({ kind: "import" })}>
+        <button type="button" className="btn primary" onClick={() => st.setDialog({ kind: "import", part: useApp.getState().tablePart })}>
           <Icon name="upload" size={16} /> Загрузить данные
         </button>
       </div>

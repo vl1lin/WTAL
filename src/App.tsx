@@ -39,7 +39,7 @@ function Dialogs() {
   if (!d) return null;
   switch (d.kind) {
     case "import":
-      return <ImportDialog />;
+      return <ImportDialog initialPart={d.part ?? "p"} />;
     case "flex":
       return <FlexDialog rows={d.rows} />;
     case "columnsChart":
@@ -47,7 +47,7 @@ function Dialogs() {
     case "newColumn":
       return <NewColumnDialog />;
     case "columnProps":
-      return <ColumnPropsDialog columnId={d.columnId} />;
+      return <ColumnPropsDialog columnId={d.columnId} part={d.part} />;
     case "chartSettings":
       return <ChartSettingsDialog chartId={d.chartId} />;
     case "trend":
@@ -78,6 +78,7 @@ export function App() {
   const studyId = useApp((s) => s.activeStudyId);
   const study = useApp((s) => s.project.studies.find((x) => x.id === s.activeStudyId));
   const sel = useApp((s) => (s.activeStudyId ? (s.selection[s.activeStudyId]?.length ?? 0) : 0));
+  const tablePart = useApp((s) => s.tablePart);
   const [tableW, setTableW] = useState(460);
   const drag = useRef<{ x: number; w: number } | null>(null);
 
@@ -93,7 +94,7 @@ export function App() {
         ) : view === "split" ? (
           <>
             <div className="table-wrap" style={{ width: tableW }}>
-              <DataTable study={study} />
+              <DataTable study={study} part={tablePart} />
             </div>
             <div
               className="splitter"

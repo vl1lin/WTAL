@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { colIndex, colLetter, parse, shiftFormula } from "./formula";
 import { computeSheet, parseDateTime, parsePasted } from "./sheet";
-import { bourdetDerivative, superposedTime } from "./welltest";
+import { baseData, bourdetDerivative, deltaP, producingTime, rateEvents, superposedTime } from "./welltest";
 import { fitTrend } from "./regression";
 import { fractureArea } from "./fracture";
 import type { CalcState, Column, Study } from "./types";
@@ -22,6 +22,8 @@ const study = (columns: Column[]): Study => ({
   name: "s",
   columns,
   roles: {},
+  rateColumns: [],
+  rateRoles: {},
   testType: "buildup",
   tpSeconds: 0,
   rateBeforeM3s: 0,
@@ -116,5 +118,58 @@ describe("калькулятор ГРП (сверка с Excel пользова�
     const r = fractureArea(s, q / 86_400, 0.13, inv(m));
     // Excel использует 1 мД = 1e-15 м² и 2,78e-4 ч/с — расхождение < 0,1 %.
     expect(Math.abs(r.area_m2 / excelArea - 1)).toBeLessThan(1e-3);
+  });
+});
+
+describe("раздельные таблицы давления и дебитов", () => {
+  const mk = (pTime: string[], p: string[], qTime: string[], q: string[], dates = false, qDates = dates): Study => ({
+    id: "s",
+    name: "s",
+    columns: [
+      { id: "t", name: "t", quantity: dates ? "datetime" : "time", unit: "h", cells: pTime },
+      { id: "p", name: "p", quantity: "pressure", unit: "atm", cells: p },
+    ],
+    roles: { time: "t", pressure: "p" },
+    rateColumns: [
+      { id: "qt", name: "qt", quantity: qDates ? "datetime" : "time", unit: "h", cells: qTime },
+      { id: "q", name: "q", quantity: "rate", unit: "m3/d", cells: q },
+    ],
+    rateRoles: { time: "qt", rate: "q" },
+    testType: "buildup",
+    tpSeconds: 0,
+    rateBeforeM3s: 0,
+  });
+  it("Δt и p0 — от последнего изменения дебита, tp — длительность работы", () => {
+    const st = mk(["0", "2", "5", "6", "8"], ["150", "149", "148", "155", "157"], ["-100", "5"], ["22", "0"]);
+    const b = baseData(st, computeSheet(st));
+    expect(b.tStart_s).toBe(5 * 3600);
+    expect(b.dt_s).toEqual([-5, -3, 0, 1, 3].map((h) => h * 3600));
+    expect(deltaP(st, b)[3]).toBeCloseTo(7 * 101_325, 6);
+    const ev = rateEvents(st, b);
+    expect(ev.map((e) => e.t_s / 3600)).toEqual([-105, 0]);
+    expect(producingTime(st, ev, b) / 3600).toBeCloseTo(105, 9);
+  });
+  it("даты в обеих таблицах совмещаются по абсолютному времени", () => {
+    const st = mk(
+      ["12.03.2026 08:00", "12.03.2026 10:00", "12.03.2026 11:00"],
+      ["150", "151", "153"],
+      ["01.03.2026 00:00", "12.03.2026 10:00"],
+      ["22", "0"],
+      true,
+    );
+    const b = baseData(st, computeSheet(st));
+    expect(b.tStart_s).toBe(2 * 3600);
+    expect(b.p0_Pa).toBeCloseTo(151 * 101_325, 6);
+  });
+  it("дебиты числом при давлении-дате считаются от первой строки давления", () => {
+    const st = mk(["12.03.2026 08:00", "12.03.2026 10:00"], ["150", "151"], ["-24", "1"], ["22", "0"], true, false);
+    const b = baseData(st, computeSheet(st));
+    expect(b.tStart_s).toBe(3600);
+  });
+  it("без таблицы дебитов — прежнее поведение (от первой строки)", () => {
+    const st = { ...mk(["0", "1"], ["150", "151"], [], []), rateColumns: [], rateRoles: {} };
+    const b = baseData(st, computeSheet(st));
+    expect(b.tStart_s).toBe(0);
+    expect(b.rates).toBeNull();
   });
 });

@@ -29,6 +29,7 @@ const PATHS: Record<string, string> = {
   loglog: "M4 3v17h17M6 17c3-1 4-5 6-7s4-2 7-2M8 7h1M8 11h1M14 17v1M18 17v1",
   semilog: "M4 3v17h17M6 8l13 9",
   history: "M4 3v17h17M6 8h4l1 6 3-3h2l3-5",
+  rates: "M4 3v17h17M5 8h5v6h4V9h5",
   custom: "M4 3v17h17M7 15c2-6 6-8 12-8M13 13h5M15.5 10.5v5",
   columns: "M3 4h18v16H3zM9 4v16M15 4v16M3 9h18",
   sort: "M7 4v16M4 17l3 3 3-3M14 6h7M14 11h5M14 16h3",

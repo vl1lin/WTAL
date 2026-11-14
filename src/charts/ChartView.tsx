@@ -208,6 +208,22 @@ export function ChartView(props: ChartViewProps) {
         pts.forEach((p, i) => (i === 0 ? g.moveTo(p.sx, p.sy) : g.lineTo(p.sx, p.sy)));
         g.stroke();
       }
+      if (s.marker === "step") {
+        // Ступенька: режим держится до начала следующего.
+        g.lineWidth = 2;
+        g.beginPath();
+        pts.forEach((p, i) => {
+          if (i === 0) g.moveTo(p.sx, p.sy);
+          else {
+            const prev = pts[i - 1];
+            if (prev) g.lineTo(p.sx, prev.sy);
+            g.lineTo(p.sx, p.sy);
+          }
+        });
+        g.stroke();
+        g.lineWidth = 1.3;
+        return;
+      }
       for (const p of pts) {
         if (!Number.isFinite(p.sx) || !Number.isFinite(p.sy)) continue;
         const isSel = selected.has(p.row) && s.studyId === chart.studyId;
@@ -586,7 +602,7 @@ export function ChartView(props: ChartViewProps) {
       <div className="chart-legend">
         {data.series.map((s) => (
           <span key={s.key}>
-            <i style={{ color: s.color }}>{s.marker === "cross" ? "+" : s.marker === "circle" ? "○" : "●"}</i> {s.name}
+            <i style={{ color: s.color }}>{s.marker === "cross" ? "+" : s.marker === "circle" ? "○" : s.marker === "step" ? "—" : "●"}</i> {s.name}
           </span>
         ))}
       </div>
