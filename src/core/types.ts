@@ -57,6 +57,10 @@ export interface Study {
   rateRoles: { time?: string; rate?: string };
   /** Что означает время в таблице дебитов: начало режима (по умолчанию) или его конец (как в выгрузках Saphir). */
   rateTimeMode?: "start" | "end";
+  /** Тип периода определяется по дебитам (по умолчанию) или задан вручную полем testType. */
+  testTypeAuto?: boolean;
+  /** Отсчёт Δt: от последней смены дебита (по умолчанию) или от первой строки давления. */
+  dtFrom?: "rateChange" | "firstPoint";
   /** Главная страница: вся история скважины, из неё создаются исследования. */
   isMain?: boolean;
   testType: TestType;

@@ -9,6 +9,7 @@
  *                    если таблицы дебитов нет — первая строка давления)
  *        dt_s     — время от начала периода (Δt), hist_s — время от первой строки давления
  *   ├─ effectiveTestType()              — КВД/КСД по направлению последнего изменения дебита
+ *                                         (или как задано вручную: testTypeAuto = false)
  *   ├─ deltaP()                         — Δp от давления p0 в момент tStart (КВД: p − p0, КСД: p0 − p), Па
  *   ├─ rateEvents()                     — история дебитов относительно tStart (для суперпозиции)
  *   ├─ producingTime()                  — tp: длительность работы до последнего изменения режима
@@ -158,15 +159,22 @@ export function baseData(study: Study, sheet: Sheet, periodRows?: number[]): Bas
   // Начало периода — последнее изменение дебита не позже последней точки давления
   // (или не позже первой из выбранных строк).
   let lastHist = out.hist_s[out.hist_s.length - 1] ?? 0;
+  let selFirst = 0;
   if (periodRows && periodRows.length > 0) {
     const sel = new Set(periodRows);
     let first = Number.POSITIVE_INFINITY;
     out.rows.forEach((r, i) => {
       if (sel.has(r)) first = Math.min(first, out.hist_s[i] ?? Number.POSITIVE_INFINITY);
     });
-    if (Number.isFinite(first)) lastHist = first;
+    if (Number.isFinite(first)) {
+      lastHist = first;
+      selFirst = first;
+    }
   }
-  if (out.rates && out.rates.length > 0) {
+  if (study.dtFrom === "firstPoint") {
+    // Отсчёт Δt от первой строки давления (или первой выделенной), без привязки к смене дебита.
+    out.tStart_s = selFirst;
+  } else if (out.rates && out.rates.length > 0) {
     let start = Number.NaN;
     let prevQ = Number.NaN;
     for (const e of out.rates) {
@@ -192,6 +200,7 @@ export function baseData(study: Study, sheet: Sheet, periodRows?: number[]): Bas
  * @returns "buildup" или "drawdown"
  */
 export function effectiveTestType(study: Study, base: BaseData): Study["testType"] {
+  if (study.testTypeAuto === false) return study.testType;
   const r = base.rates;
   if (!r || r.length === 0) return study.testType;
   let qPrev = 0;

@@ -31,11 +31,14 @@ export function CreateStudyDialog() {
   const count = studies.filter((s) => !s.isMain).length;
   const [name, setName] = useState(`Исследование ${count + 1}`);
   const [kinds, setKinds] = useState<Record<string, boolean>>({ loglog: true, flex: true, combo: true, semilog: false });
+  const [typeMode, setTypeMode] = useState<"auto" | "buildup" | "drawdown">("auto");
+  const [dtFrom, setDtFrom] = useState<"rateChange" | "firstPoint">("rateChange");
 
   // Предварительный расчёт: какой период получится.
   const info = useMemo(() => {
     if (!main || !rows || rows.length < 2) return null;
-    const s = studyFromSelection(main, rows, name);
+    const s0 = studyFromSelection(main, rows, name);
+    const s = { ...s0, testTypeAuto: typeMode === "auto", testType: typeMode === "auto" ? s0.testType : typeMode, dtFrom };
     const b = baseData(s, computeSheet(s));
     if (b.rows.length === 0) return { s, text: "В выделенных строках нет времени и давления — проверьте столбцы главной страницы (⚙)." };
     const span = (b.hist_s[b.hist_s.length - 1] ?? 0) / 3600;
@@ -44,13 +47,17 @@ export function CreateStudyDialog() {
       const ev = rateEvents(s, b);
       const n = ev.length;
       const q = (i: number): string => fmt(fromSI(ev[i]?.q_m3_s ?? Number.NaN, "rate", "m3/d"), 4);
-      text += `Тип: ${effectiveTestType(s, b) === "buildup" ? "КВД" : "КСД"}, Δt — от смены дебита ${n > 1 ? q(n - 2) : "0"} → ${q(n - 1)} м³/сут`;
-      text += b.tStart_s > 0 ? ` (через ${fmt(b.tStart_s / 3600, 4)} ч после первой выделенной точки).` : ".";
+      text += `Тип: ${effectiveTestType(s, b) === "buildup" ? "КВД" : "КСД"}${typeMode === "auto" ? " (по дебитам)" : " (задан вручную)"}. `;
+      text +=
+        dtFrom === "firstPoint"
+          ? "Δt — от первой выделенной точки."
+          : `Δt — от смены дебита ${n > 1 ? q(n - 2) : "0"} → ${q(n - 1)} м³/сут` +
+            (b.tStart_s > 0 ? ` (через ${fmt(b.tStart_s / 3600, 4)} ч после первой выделенной точки).` : ".");
     } else {
-      text += "Таблица дебитов главной страницы пуста — Δt от первой выделенной точки, тип задайте в настройках исследования.";
+      text += `Таблица дебитов главной страницы пуста — Δt от первой выделенной точки, тип: ${s.testType === "buildup" ? "КВД" : "КСД"}.`;
     }
     return { s, text };
-  }, [main, rows, name]);
+  }, [main, rows, name, typeMode, dtFrom]);
 
   const create = (): void => {
     if (!info) return;
@@ -98,6 +105,23 @@ export function CreateStudyDialog() {
             Название
             <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()} />
           </label>
+          <div className="two-col">
+            <label className="lbl">
+              Тип исследования
+              <select className="input" value={typeMode} onChange={(e) => setTypeMode(e.target.value as typeof typeMode)}>
+                <option value="auto">Авто — по направлению смены дебита</option>
+                <option value="buildup">КВД — восстановление: Δp = p − p₀</option>
+                <option value="drawdown">КСД — падение: Δp = p₀ − p</option>
+              </select>
+            </label>
+            <label className="lbl">
+              Отсчёт Δt
+              <select className="input" value={dtFrom} onChange={(e) => setDtFrom(e.target.value as typeof dtFrom)}>
+                <option value="rateChange">От последней смены дебита</option>
+                <option value="firstPoint">От первой выделенной точки</option>
+              </select>
+            </label>
+          </div>
           <div className="banner blue small">{info.text}</div>
           <div className="row gap wrap small">
             <b>Создать графики:</b>

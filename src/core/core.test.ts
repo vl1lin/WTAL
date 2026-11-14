@@ -194,6 +194,16 @@ describe("раздельные таблицы давления и дебитов
     expect(b.tStart_s / 3600).toBe(10);
     expect(b.dt_s.map((t) => t / 3600)).toEqual([-10, 0, 0.5, 2]);
   });
+  it("ручной тип и отсчёт Δt от первой точки", () => {
+    const base = mk(["0", "2", "5", "6", "8"], ["150", "149", "148", "155", "157"], ["-100", "5"], ["22", "0"]);
+    const st = { ...base, testTypeAuto: false, testType: "drawdown" as const, dtFrom: "firstPoint" as const };
+    const b = baseData(st, computeSheet(st));
+    expect(b.tStart_s).toBe(0);
+    expect(effectiveTestType(st, b)).toBe("drawdown");
+    expect(deltaP(st, b)[1]).toBeCloseTo(1 * 101_325, 6);
+    const ev = rateEvents(st, b);
+    expect(ev.map((e) => e.t_s / 3600)).toEqual([-100]);
+  });
   it("без таблицы дебитов — прежнее поведение (от первой строки)", () => {
     const st = { ...mk(["0", "1"], ["150", "151"], [], []), rateColumns: [], rateRoles: {} };
     const b = baseData(st, computeSheet(st));

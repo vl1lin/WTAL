@@ -43,6 +43,8 @@ const projectSchema = z.object({
       rateRoles: z.object({ time: z.string().optional(), rate: z.string().optional() }).default({}),
       rateTimeMode: z.enum(["start", "end"]).optional(),
       isMain: z.boolean().optional(),
+      testTypeAuto: z.boolean().optional(),
+      dtFrom: z.enum(["rateChange", "firstPoint"]).optional(),
       testType: z.enum(["buildup", "drawdown"]),
       tpSeconds: z.number(),
       rateBeforeM3s: z.number(),

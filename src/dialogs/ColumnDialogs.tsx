@@ -279,7 +279,7 @@ export function StudyDialog({ studyId }: { studyId: string }) {
           )}
           <span className="grow" />
           <button type="button" className="btn" onClick={() => st.setDialog(null)}>Отмена</button>
-          <button type="button" className="btn primary" onClick={() => { st.updateStudy(study.id, { name: s.name, testType: s.testType, tpSeconds: s.tpSeconds, rateBeforeM3s: s.rateBeforeM3s, roles: s.roles, rateRoles: s.rateRoles, rateTimeMode: s.rateTimeMode }); st.setDialog(null); }}>Сохранить</button>
+          <button type="button" className="btn primary" onClick={() => { st.updateStudy(study.id, { name: s.name, testType: s.testType, tpSeconds: s.tpSeconds, rateBeforeM3s: s.rateBeforeM3s, roles: s.roles, rateRoles: s.rateRoles, rateTimeMode: s.rateTimeMode, testTypeAuto: s.testTypeAuto, dtFrom: s.dtFrom }); st.setDialog(null); }}>Сохранить</button>
         </>
       }
     >
@@ -288,7 +288,15 @@ export function StudyDialog({ studyId }: { studyId: string }) {
           <label className="lbl">Название<input className="input" value={s.name} onChange={(e) => setS({ ...s, name: e.target.value })} /></label>
           <label className="lbl">
             Тип
-            <select className="input" value={s.testType} onChange={(e) => setS({ ...s, testType: e.target.value as TestType })}>
+            <select
+              className="input"
+              value={s.testTypeAuto === false || !info.hasTable ? s.testType : "auto"}
+              onChange={(e) => {
+                const v = e.target.value;
+                setS(v === "auto" ? { ...s, testTypeAuto: true } : { ...s, testTypeAuto: false, testType: v as TestType });
+              }}
+            >
+              {info.hasTable && <option value="auto">Авто — по направлению смены дебита</option>}
               <option value="buildup">КВД (восстановление): Δp = p − p₀</option>
               <option value="drawdown">КСД / падение: Δp = p₀ − p</option>
             </select>
@@ -305,6 +313,13 @@ export function StudyDialog({ studyId }: { studyId: string }) {
           {rateRoleSel("rate", "Дебит")}
         </div>
         <label className="lbl">
+          Отсчёт Δt
+          <select className="input" value={s.dtFrom ?? "rateChange"} onChange={(e) => setS({ ...s, dtFrom: e.target.value === "firstPoint" ? "firstPoint" : "rateChange" })}>
+            <option value="rateChange">От последней смены дебита</option>
+            <option value="firstPoint">От первой строки давления</option>
+          </select>
+        </label>
+        <label className="lbl">
           Время в таблице дебитов
           <select className="input" value={s.rateTimeMode ?? "start"} onChange={(e) => setS({ ...s, rateTimeMode: e.target.value === "end" ? "end" : "start" })}>
             <option value="start">начало режима</option>
@@ -313,9 +328,11 @@ export function StudyDialog({ studyId }: { studyId: string }) {
         </label>
         {info.hasTable ? (
           <div className="banner blue small">
-            Начало анализируемого периода — последнее изменение дебита: {fmt(info.b.tStart_s / 3600, 6)} ч от начала записи давления.
+            {study.dtFrom === "firstPoint"
+              ? "Δt отсчитывается от первой строки давления."
+              : `Начало анализируемого периода — последнее изменение дебита: ${fmt(info.b.tStart_s / 3600, 6)} ч от начала записи давления.`}
             Время работы до него tp = {fmt(info.tp / 3600, 6)} ч. Тип периода по дебитам:{" "}
-            <b>{info.type === "buildup" ? "КВД (дебит снизился)" : "КСД (дебит вырос)"}</b> — поле «Тип» не используется.
+            <b>{info.type === "buildup" ? "КВД (дебит снизился)" : "КСД (дебит вырос)"}</b>.
           </div>
         ) : (
           <>
