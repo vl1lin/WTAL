@@ -155,7 +155,7 @@ export function tileCharts(charts: ChartDef[], area: { w: number; h: number }): 
   const n = Math.max(1, vis.length);
   const cols = n <= 1 ? 1 : n <= 4 ? 2 : 3;
   const rows = Math.ceil(n / cols);
-  const gap = 8;
+  const gap = 4;
   const w = Math.max(240, (area.w - gap * (cols + 1)) / cols);
   const h = Math.max(180, (area.h - gap * (rows + 1)) / rows);
   let k = 0;

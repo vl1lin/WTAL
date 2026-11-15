@@ -1,6 +1,6 @@
 /**
  * Верхняя панель: вид (таблица+графики / только графики / калькулятор), проект (демо, файл),
- * загрузка данных и вкладки исследований (как вкладки анализов в Saphir).
+ * загрузка данных и вкладки исследований (как вкладки анализов в Saphir) — всё в одну строку.
  */
 import { useEffect, useRef, useState } from "react";
 import { useApp, type ViewMode } from "../store";
@@ -69,7 +69,7 @@ export function TopBar() {
     ["split", "Таблица + графики"],
     ["charts", "Только графики"],
     ["calc", "Калькулятор"],
-    ["builder", "Построитель графиков"],
+    ["builder", "Построитель"],
   ];
   const builder = view === "builder";
   // В построителе — только его наборы графиков, в остальных видах — главная страница и исследования.
@@ -78,8 +78,8 @@ export function TopBar() {
     <header className="topbar">
       <div className="topbar-row">
         <div className="brand">
-          <span className="logo"><Icon name="logo" size={22} /></span>
-          WTAL <span className="muted small">анализ ГДИС</span>
+          <span className="logo"><Icon name="logo" size={18} /></span>
+          WTAL
         </div>
         <div role="group" aria-label="Вид" className="seg">
           {views.map(([v, l]) => (
@@ -88,18 +88,6 @@ export function TopBar() {
             </button>
           ))}
         </div>
-        <span className="grow" />
-        <ProjectMenu />
-        {builder ? (
-          <button type="button" className="btn primary" disabled={!active || !tabs.some((s) => s.id === active)} onClick={() => st.setDialog({ kind: "builderImport" })}>
-            <Icon name="upload" size={16} /> Загрузить график
-          </button>
-        ) : (
-          <button type="button" className="btn primary" onClick={() => st.setDialog({ kind: "import", part: useApp.getState().tablePart })}>
-            <Icon name="upload" size={16} /> Загрузить данные
-          </button>
-        )}
-      </div>
       <div role="tablist" aria-label={builder ? "Наборы графиков" : "Исследования"} className="study-tabs">
         {tabs.map((s) => {
           const on = s.id === active && view !== "calc";
@@ -108,7 +96,7 @@ export function TopBar() {
               <div key={s.id} className={`study-tab main-tab${on ? " on" : ""}`}>
                 <button type="button" role="tab" aria-selected={on} onClick={() => { st.setActiveStudy(s.id); if (view !== "split") st.setView("split"); }}>
                   <Icon name="home" size={14} />
-                  Главная страница
+                  Главная
                 </button>
                 <button type="button" className="tab-gear" aria-label="Настройки главной страницы" title="Столбцы и режим времени дебитов" onClick={() => st.setDialog({ kind: "study", studyId: s.id })}>
                   <Icon name="gear" size={13} />
@@ -187,6 +175,17 @@ export function TopBar() {
         ) : (
           <button type="button" className="tab-add" title="Создать исследование из выделенного на главной странице" onClick={() => st.setDialog({ kind: "createStudy" })}>
             + Новое
+          </button>
+        )}
+      </div>
+        <ProjectMenu />
+        {builder ? (
+          <button type="button" className="btn primary" disabled={!active || !tabs.some((s) => s.id === active)} onClick={() => st.setDialog({ kind: "builderImport" })}>
+            <Icon name="upload" size={14} /> Загрузить график
+          </button>
+        ) : (
+          <button type="button" className="btn primary" onClick={() => st.setDialog({ kind: "import", part: useApp.getState().tablePart })}>
+            <Icon name="upload" size={14} /> Загрузить данные
           </button>
         )}
       </div>

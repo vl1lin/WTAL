@@ -95,7 +95,7 @@ function ChartTablePanel({ onHide }: { onHide(): void }) {
 
 export function BuilderView() {
   const studyId = useApp((s) => (s.project.studies.find((x) => x.id === s.activeStudyId)?.isBuilder ? s.activeStudyId : null));
-  const [tableW, setTableW] = useState(380);
+  const [tableW, setTableW] = useState(300);
   const [showTable, setShowTable] = useState(true);
   const drag = useRef<{ x: number; w: number } | null>(null);
   if (!studyId) return <BuilderWelcome />;

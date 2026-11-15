@@ -359,6 +359,9 @@ function ChartWindow({ chart, area }: { chart: ChartDef; area: { w: number; h: n
 }
 
 /** Область свободных окон графиков активного исследования. */
+/** Размер области графиков, при котором окна исследования были разложены последний раз. */
+const layoutArea = new Map<string, { w: number; h: number }>();
+
 export function ChartArea({ studyId, emptyHint }: { studyId: string; emptyHint?: React.ReactNode }) {
   const charts = useApp((s) => s.project.charts);
   const ref = useRef<HTMLDivElement>(null);
@@ -373,6 +376,21 @@ export function ChartArea({ studyId, emptyHint }: { studyId: string; emptyHint?:
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Область графиков изменилась (свернули панель, сдвинули разделитель) — окна растягиваются пропорционально,
+  // раскладка пользователя сохраняется. Размер области запоминается для каждого исследования.
+  useEffect(() => {
+    if (area.w < 200 || area.h < 150) return;
+    const prev = layoutArea.get(studyId);
+    layoutArea.set(studyId, area);
+    if (!prev || (prev.w === area.w && prev.h === area.h)) return;
+    const kx = area.w / prev.w;
+    const ky = area.h / prev.h;
+    const st = useApp.getState();
+    st.project.charts
+      .filter((c) => c.studyId === studyId)
+      .forEach((c) => st.updateChart(c.id, { rect: { x: c.rect.x * kx, y: c.rect.y * ky, w: Math.max(240, c.rect.w * kx), h: Math.max(160, c.rect.h * ky) } }));
+  }, [area, studyId]);
 
   // Новые графики (с размером по умолчанию) раскладываем в сетку один раз.
   useEffect(() => {

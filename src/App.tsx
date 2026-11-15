@@ -103,7 +103,8 @@ export function App() {
   const study = useApp((s) => s.project.studies.find((x) => x.id === s.activeStudyId));
   const sel = useApp((s) => (s.activeStudyId ? (s.selection[s.activeStudyId]?.length ?? 0) : 0));
   const tablePart = useApp((s) => s.tablePart);
-  const [tableW, setTableW] = useState(460);
+  const [tableW, setTableW] = useState(360);
+  const [showTable, setShowTable] = useState(true);
   const drag = useRef<{ x: number; w: number } | null>(null);
 
   return (
@@ -119,8 +120,17 @@ export function App() {
           view === "charts" ? <ChartGrid /> : <Welcome />
         ) : view === "split" ? (
           <>
+            {!showTable ? (
+              <button type="button" className="side-tab" onClick={() => setShowTable(true)} title="Показать таблицу">
+                Таблица ⟩
+              </button>
+            ) : (
+            <>
             <div className="table-wrap" style={{ width: tableW }}>
               <DataTable study={study} part={tablePart} />
+              <button type="button" className="icon-btn table-hide" aria-label="Скрыть таблицу" title="Скрыть таблицу — больше места для графиков" onClick={() => setShowTable(false)}>
+                ⟨
+              </button>
             </div>
             <div
               className="splitter"
@@ -135,6 +145,8 @@ export function App() {
               }}
               onPointerUp={() => (drag.current = null)}
             />
+            </>
+            )}
             <main className="main-charts">
               <ChartArea studyId={studyId} />
               <LineInfo />
@@ -148,11 +160,11 @@ export function App() {
         )}
       </div>
       <footer className="statusbar">
-        {view !== "calc" && <span>Инструмент: <b>{TOOL_NAMES[tool]}</b></span>}
+        {view !== "calc" && <span className="status-tool">Инструмент: <b>{TOOL_NAMES[tool]}</b></span>}
         {sel > 0 && <span>Выделено строк: <b>{sel}</b></span>}
         <span className="grow" />
         <StatusCursor />
-        <span>Колесо — масштаб · средняя кнопка — сдвиг · ПКМ по графику — параметры</span>
+        <span className="muted">Колесо — масштаб · средняя кнопка — сдвиг · ПКМ — параметры</span>
       </footer>
       <Dialogs />
     </div>

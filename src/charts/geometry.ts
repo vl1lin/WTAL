@@ -10,7 +10,7 @@
 import type { AxisPoint, View } from "../core/types";
 import type { Series } from "./series";
 
-export const MARGIN = { l: 64, r: 16, t: 12, b: 42 };
+export const MARGIN = { l: 60, r: 12, t: 8, b: 36 };
 
 export const toAxis = (v: number, log: boolean): number => (log ? (v > 0 ? Math.log10(v) : Number.NaN) : v);
 export const fromAxis = (v: number, log: boolean): number => (log ? 10 ** v : v);

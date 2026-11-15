@@ -26,7 +26,7 @@ import { uid } from "../core/factory";
 import { colLetter, shiftFormula } from "../core/formula";
 import { dimensionOfQuantity, unitLabel } from "../core/units";
 
-const ROW_H = 24;
+const ROW_H = 21;
 const COL_W = 108;
 const HEAD_W = 46;
 
