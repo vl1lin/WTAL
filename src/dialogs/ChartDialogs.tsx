@@ -10,11 +10,11 @@
  *   Preview             — живой предпросмотр через ChartView
  */
 import { useMemo, useState } from "react";
-import { useApp } from "../store";
+import { useApp, selKeyOf } from "../store";
 import { Modal, NumInput } from "./common";
 import type { ChartDef, FitType, Marker, Superposition, TimeFn } from "../core/types";
 import { newChart, uid } from "../core/factory";
-import { buildChartData, COLORS, sheetOf } from "../charts/series";
+import { buildChartData, buildChartDataAllSeries, COLORS, sheetOf } from "../charts/series";
 import { ChartView } from "../charts/ChartView";
 import { makeTrend, lineStats } from "../charts/trend";
 import { fmt, FIT_LABELS } from "../core/regression";
@@ -66,7 +66,7 @@ function Radio<T extends string>(props: { name: string; value: T; current: T; la
 /** Живой предпросмотр графика. */
 function Preview({ chart, height = 300 }: { chart: ChartDef; height?: number }) {
   const project = useApp((s) => s.project);
-  const sel = useApp((s) => s.selection[chart.studyId]);
+  const sel = useApp((s) => s.selection[selKeyOf(chart, s.project)]);
   const data = useMemo(() => buildChartData(chart, project), [chart, project]);
   // Масштаб предпросмотра сбрасывается при смене вида графика, функций и шкал.
   const viewKey = `${chart.kind}|${chart.timeFn}|${chart.superposition}|${chart.yFn}|${chart.xLog}|${chart.yLog}|${chart.normalizeByRate}`;
@@ -464,7 +464,7 @@ export function TrendDialog({ chartId }: { chartId: string }) {
   const st = useApp.getState();
   const project = useApp((s) => s.project);
   const chart = project.charts.find((c) => c.id === chartId);
-  const rows = useApp((s) => (chart ? s.selection[chart.studyId] : undefined));
+  const rows = useApp((s) => (chart ? s.selection[selKeyOf(chart, s.project)] : undefined));
   const data = useMemo(() => (chart ? buildChartData(chart, project) : null), [chart, project]);
   const sel = useMemo(() => new Set(rows ?? []), [rows]);
   const candidates = (data?.series ?? []).filter((s) => s.studyId === chart?.studyId && s.points.some((p) => sel.has(p.row)));
@@ -540,6 +540,68 @@ export function TrendDialog({ chartId }: { chartId: string }) {
           </div>
         )}
         {typeof res === "string" && candidates.length > 0 && <div className="banner warn">{res}</div>}
+      </div>
+    </Modal>
+  );
+}
+
+/** Вид точек графика: размер, прозрачность, прореживание, настройки серий. Изменения применяются сразу. */
+export function PointStyleDialog({ chartId }: { chartId: string }) {
+  const st = useApp.getState();
+  const project = useApp((s) => s.project);
+  const chart = project.charts.find((c) => c.id === chartId);
+  const all = useMemo(() => (chart ? buildChartDataAllSeries(chart, project) : null), [chart, project]);
+  if (!chart || !all) return null;
+  const ps = chart.pointStyle ?? { size: 1, opacity: 1, thin: 1 };
+  const setPs = (p: Partial<typeof ps>): void => st.updateChart(chart.id, { pointStyle: { ...ps, ...p } });
+  const ss = chart.seriesStyle ?? {};
+  const setSs = (key: string, p: { hidden?: boolean; color?: string; marker?: Marker }): void =>
+    st.updateChart(chart.id, { seriesStyle: { ...ss, [key]: { ...ss[key], ...p } } });
+  const total = all.series.reduce((n, s) => n + s.points.length, 0);
+  return (
+    <Modal
+      title="Вид точек"
+      sub={chart.name}
+      width={560}
+      onClose={() => st.setDialog(null)}
+      footer={
+        <>
+          <button type="button" className="btn" onClick={() => st.updateChart(chart.id, { pointStyle: undefined, seriesStyle: undefined })}>Сбросить</button>
+          <span className="grow" />
+          <button type="button" className="btn primary" onClick={() => st.setDialog(null)}>Готово</button>
+        </>
+      }
+    >
+      <div className="col gap">
+        <label className="lbl">
+          Размер точек: {fmt(ps.size, 2)}×
+          <input type="range" min={0.3} max={3} step={0.1} value={ps.size} onChange={(e) => setPs({ size: Number(e.target.value) })} />
+        </label>
+        <label className="lbl">
+          Непрозрачность: {Math.round(ps.opacity * 100)} %
+          <input type="range" min={0.05} max={1} step={0.05} value={ps.opacity} onChange={(e) => setPs({ opacity: Number(e.target.value) })} />
+        </label>
+        <label className="lbl">
+          Прореживание: {ps.thin <= 1 ? "все точки" : `каждая ${ps.thin}-я точка`} (всего {total})
+          <input type="range" min={1} max={20} step={1} value={ps.thin} onChange={(e) => setPs({ thin: Number(e.target.value) })} />
+        </label>
+        <div className="hint-box small">Выделенные точки показываются всегда, прореживание на расчёты и тренды не влияет.</div>
+        <b className="small">Серии</b>
+        {all.series.map((s) => {
+          const o = ss[s.key] ?? {};
+          return (
+            <div key={s.key} className="series-row" style={{ gridTemplateColumns: "24px 1fr 120px 40px" }}>
+              <input type="checkbox" checked={!o.hidden} aria-label={`Показывать ${s.name}`} onChange={(e) => setSs(s.key, { hidden: !e.target.checked })} />
+              <span>{s.name} <span className="muted small">({s.points.length})</span></span>
+              <select className="input" value={o.marker ?? s.marker} aria-label="Маркер" onChange={(e) => setSs(s.key, { marker: e.target.value as Marker })}>
+                {MARKERS.map(([m, l]) => (
+                  <option key={m} value={m}>{l}</option>
+                ))}
+              </select>
+              <input type="color" value={o.color ?? s.color} aria-label="Цвет серии" onChange={(e) => setSs(s.key, { color: e.target.value })} />
+            </div>
+          );
+        })}
       </div>
     </Modal>
   );

@@ -148,7 +148,7 @@ kbd { padding: 0 5px; border: 1px solid #94a3b8; border-radius: 3px; background:
 
 /* ---------- окна графиков ---------- */
 .main-charts { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
-.chart-area { position: relative; flex: 1 1 auto; min-width: 0; background: #e2e8f0; overflow: hidden; }
+.chart-area { position: relative; isolation: isolate; flex: 1 1 auto; min-width: 0; background: #e2e8f0; overflow: hidden; }
 .win { position: absolute; display: flex; flex-direction: column; border: 1px solid #94a3b8; border-radius: 6px; overflow: hidden; background: #0b1016; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15); }
 .win.active { border-color: var(--blue); box-shadow: 0 0 0 2px #bfdbfe; }
 .win-head { display: flex; align-items: center; gap: 2px; padding: 3px 4px 3px 10px; background: #1e293b; color: #f1f5f9; font-size: 12px; font-weight: 500; cursor: move; flex: 0 0 auto; height: 29px; user-select: none; }
@@ -177,7 +177,7 @@ kbd { padding: 0 5px; border: 1px solid #94a3b8; border-radius: 3px; background:
 .rz-ne { right: 0; top: 0; width: 10px; height: 10px; cursor: nesw-resize; }
 .rz-sw { left: 0; bottom: 0; width: 10px; height: 10px; cursor: nesw-resize; }
 .empty-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 40px; color: var(--muted); text-align: center; }
-.charts-menu { position: absolute; right: 14px; bottom: 12px; z-index: 50; }
+.charts-menu { position: absolute; right: 14px; bottom: 12px; z-index: 30000; }
 .charts-btn { font-weight: 600; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.15); }
 .charts-list { position: absolute; right: 0; bottom: 42px; width: 300px; max-height: 60vh; overflow: auto; }
 .check-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 4px; cursor: pointer; }
@@ -275,3 +275,27 @@ select.unit { min-width: 84px; max-width: 130px; flex: 0 0 auto; }
 @media (max-width: 900px) {
   .flex-dialog, .import-grid, .calc-params { grid-template-columns: 1fr; }
 }
+
+/* ---------- Построитель графиков ---------- */
+.form-row { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 10px; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #334155; margin-bottom: 8px; }
+.map-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+.map-table th { text-align: left; font-weight: 600; color: #475569; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.map-table td { padding: 3px 6px; border-bottom: 1px solid #f1f5f9; }
+.map-table tr.muted td { opacity: 0.55; }
+.map-table input[type="color"] { width: 32px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 4px; }
+.unit-input { width: 80px; }
+.check-list { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; max-height: 260px; overflow-y: auto; }
+.sidebar.rail { width: 52px; flex-basis: 52px; }
+.sidebar.rail .tools { grid-template-columns: 1fr; }
+.sidebar.rail .tool span, .sidebar.rail .check-line, .sidebar.rail .group-head span:first-child { display: none; }
+.sidebar.rail .tool { min-height: 36px; }
+.rail-toggle { display: flex; width: 100%; justify-content: center; padding: 6px; border: 0; border-bottom: 1px solid var(--line); background: #fff; color: #475569; cursor: pointer; font-size: 12px; gap: 6px; }
+.rail-toggle:hover { background: #f8fafc; }
+.builder-table { display: flex; flex: 0 0 auto; min-width: 0; border-right: 1px solid var(--line); background: #fff; }
+.builder-table-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line); background: #f8fafc; font-size: 12px; }
+.builder-table-head b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-tab { writing-mode: vertical-rl; transform: rotate(180deg); border: 0; border-right: 1px solid var(--line); background: #f8fafc; color: #334155; padding: 10px 5px; font-size: 12px; cursor: pointer; }
+.side-tab:hover { background: #eef2ff; }
+.study-tab.builder-tab svg { color: #7C3AED; }
+.builder-paste { width: 100%; min-height: 150px; margin-top: 8px; box-sizing: border-box; }

@@ -6,7 +6,7 @@
  *        изменения типа тренда → makeTrend() → store.updateLine().
  */
 import { useMemo } from "react";
-import { useApp } from "../store";
+import { useApp, selKeyOf } from "../store";
 import { buildChartData } from "./series";
 import { lineStats, makeTrend } from "./trend";
 import { fmt, FIT_LABELS } from "../core/regression";
@@ -19,7 +19,10 @@ export function LineInfo() {
   const sel = useApp((s) => s.selectedLine);
   const show = useApp((s) => s.showLineInfo);
   const project = useApp((s) => s.project);
-  const selection = useApp((s) => (sel ? s.selection[project.charts.find((c) => c.id === sel.chartId)?.studyId ?? ""] : undefined));
+  const selection = useApp((s) => {
+    const c = sel ? s.project.charts.find((x) => x.id === sel.chartId) : undefined;
+    return c ? s.selection[selKeyOf(c, s.project)] : undefined;
+  });
   const st = useApp.getState();
   const chart = project.charts.find((c) => c.id === sel?.chartId);
   const line = chart?.lines.find((l) => l.id === sel?.lineId);
@@ -49,7 +52,15 @@ export function LineInfo() {
       <div className="muted small">{chart.name}</div>
       <dl className="stats">
         <dt>Тип</dt>
-        <dd>{line.trend ? `Тренд: ${FIT_LABELS[line.trend.fit]}` : "Прямая по двум точкам"}</dd>
+        <dd>
+          {line.curve
+            ? "Кривая через точки"
+            : line.trend
+              ? `Тренд: ${FIT_LABELS[line.trend.fit]}`
+              : line.infinite === false
+                ? "Отрезок по двум точкам"
+                : "Прямая по двум точкам"}
+        </dd>
         <dt>Уравнение</dt>
         <dd className="mono">{stats.equation}</dd>
         {stats.slope !== null && (
@@ -111,10 +122,22 @@ export function LineInfo() {
           )}
         </div>
       )}
+      {line.p1 && line.p2 && !line.curve && (!line.trend || line.trend.fit === "axis") && (
+        <label className="row gap small">
+          <input
+            type="checkbox"
+            checked={line.infinite !== false}
+            onChange={(e) => st.updateLine(chart.id, line.id, { infinite: e.target.checked })}
+          />
+          Продлить на весь график
+        </label>
+      )}
       <div className="hint-box small">
-        <b>Изменить прямую</b> (инструмент «Изменить»): тянуть за узел — конец, за линию — целиком.
+        <b>Изменить</b> (инструмент «Изменить»): тянуть за узел — конец, за линию — целиком.
         <br />
-        <kbd>Ctrl</kbd> — только по горизонтали, <kbd>Shift</kbd> — только по вертикали.
+        <kbd>Ctrl</kbd> — только по горизонтали, <kbd>Shift</kbd> — только по вертикали,
+        <br />
+        <kbd>Alt</kbd> + узел — удлинить или укоротить без смены наклона.
       </div>
       {canSendInvariant && study && (
         <button

@@ -255,7 +255,7 @@ function LinePicker({ study, onPick }: { study: Study; onPick(m_Pa_s05: number):
   const project = useApp((s) => s.project);
   const [open, setOpen] = useState(false);
   const options = project.charts
-    .filter((c) => c.studyId === study.id && c.kind === "flex" && c.timeFn === "sqrt" && !c.xLog && !c.yLog && !c.normalizeByRate)
+    .filter((c) => c.studyId === study.id && ((c.kind === "flex" && c.timeFn === "sqrt" && !c.normalizeByRate) || c.kind === "columns") && !c.xLog && !c.yLog)
     .flatMap((c) => {
       const data = buildChartData(c, project);
       return c.lines

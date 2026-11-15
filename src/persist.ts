@@ -43,6 +43,7 @@ const projectSchema = z.object({
       rateRoles: z.object({ time: z.string().optional(), rate: z.string().optional() }).default({}),
       rateTimeMode: z.enum(["start", "end"]).optional(),
       isMain: z.boolean().optional(),
+      isBuilder: z.boolean().optional(),
       testTypeAuto: z.boolean().optional(),
       dtFrom: z.enum(["rateChange", "firstPoint"]).optional(),
       testType: z.enum(["buildup", "drawdown"]),
@@ -67,13 +68,17 @@ const projectSchema = z.object({
       derivL: z.number(),
       xColumn: z.string().optional(),
       yColumns: z
-        .array(z.object({ columnId: z.string(), color: z.string(), marker: z.enum(["cross", "circle", "dot", "line", "step"]) }))
+        .array(z.object({ columnId: z.string(), color: z.string(), marker: z.enum(["cross", "circle", "dot", "line", "step"]), xColumnId: z.string().optional() }))
         .optional(),
       rows: z.array(z.number()).optional(),
       overlayStudyIds: z.array(z.string()).optional(),
       view: viewSchema.optional(),
       defaultView: viewSchema.optional(),
       view2: viewSchema.optional(),
+      pointStyle: z.object({ size: z.number(), opacity: z.number(), thin: z.number() }).optional(),
+      seriesStyle: z
+        .record(z.string(), z.object({ hidden: z.boolean().optional(), color: z.string().optional(), marker: z.enum(["cross", "circle", "dot", "line", "step"]).optional() }))
+        .optional(),
       lines: z.array(
         z.object({
           id: z.string(),
@@ -81,6 +86,8 @@ const projectSchema = z.object({
           color: z.string(),
           p1: axisPoint.optional(),
           p2: axisPoint.optional(),
+          infinite: z.boolean().optional(),
+          curve: z.array(axisPoint).optional(),
           trend: z
             .object({
               fit: z.enum(["axis", "linear", "power", "log", "exp", "poly"]),

@@ -18,8 +18,8 @@ import { baseData } from "./core/welltest";
 import { computeSheet } from "./core/sheet";
 import { loadProject, saveProjectDebounced } from "./persist";
 
-export type Tool = "pan" | "zoom" | "rect" | "lasso" | "click" | "line2" | "pickline" | "info" | "editline";
-export type ViewMode = "split" | "charts" | "calc";
+export type Tool = "pan" | "zoom" | "rect" | "lasso" | "click" | "line2" | "curve" | "pickline" | "info" | "editline";
+export type ViewMode = "split" | "charts" | "calc" | "builder";
 
 export type Dialog =
   | { kind: "import"; part?: TablePart }
@@ -31,6 +31,9 @@ export type Dialog =
   | { kind: "trend"; chartId: string }
   | { kind: "study"; studyId: string }
   | { kind: "createStudy" }
+  | { kind: "pointStyle"; chartId: string }
+  | { kind: "builderImport"; chartId?: string }
+  | { kind: "overlay" }
   | null;
 
 interface AppState {
@@ -47,6 +50,8 @@ interface AppState {
   chartsFilter: string[] | null;
   /** Какая таблица исследования открыта слева: давление или дебиты. */
   tablePart: TablePart;
+  /** Порядок окон графиков: чем больше число, тем выше окно (последнее, с которым работали, — сверху). */
+  zOrder: Record<string, number>;
 
   setTablePart(p: TablePart): void;
   setView(v: ViewMode): void;
@@ -61,6 +66,13 @@ interface AppState {
   loadDemo(): void;
 
   addStudy(s: Study, charts: ChartDef["kind"][]): void;
+  /** Создать пустое исследование построителя графиков и сделать его активным. */
+  addBuilderStudy(name: string): string;
+  /**
+   * Добавить в исследование построителя столбцы загруженного графика и сам график
+   * (или серии к существующему графику — если в chart уже есть id из проекта).
+   */
+  builderAddData(studyId: string, columns: Column[], chart: ChartDef): void;
   updateStudy(id: string, patch: Partial<Study>): void;
   removeStudy(id: string): void;
   /** Заменить таблицу давления или дебитов исследования (загрузка в существующее исследование). */
@@ -159,6 +171,17 @@ export function tileCharts(charts: ChartDef[], area: { w: number; h: number }): 
   });
 }
 
+/**
+ * Ключ выделения строк для графика: у исследований — общее выделение исследования (таблица и все графики),
+ * у графиков построителя — своё (у каждого графика свои данные).
+ * @param chart график
+ * @param project проект
+ * @returns ключ в store.selection
+ */
+export function selKeyOf(chart: ChartDef, project: Project): string {
+  return project.studies.find((s) => s.id === chart.studyId)?.isBuilder ? chart.id : chart.studyId;
+}
+
 const initial = loadProject();
 
 export const useApp = create<AppState>((set, get) => ({
@@ -174,14 +197,34 @@ export const useApp = create<AppState>((set, get) => ({
   selection: {},
   chartsFilter: null,
   tablePart: "p",
+  zOrder: {},
 
   setTablePart: (tablePart) => set({ tablePart }),
-  setView: (view) => set({ view }),
+  setView: (view) =>
+    set((st) => {
+      // Построитель и анализ работают с разными наборами вкладок: при переключении выбираем подходящую.
+      const studies = st.project.studies;
+      const cur = studies.find((s) => s.id === st.activeStudyId);
+      const wantBuilder = view === "builder";
+      if (view === "calc" || Boolean(cur?.isBuilder) === wantBuilder) return { view };
+      const next = studies.find((s) => Boolean(s.isBuilder) === wantBuilder);
+      return { view, activeStudyId: next?.id ?? (wantBuilder ? null : (studies[0]?.id ?? null)), activeChartId: null, selectedLine: null };
+    }),
   setTool: (tool) => set({ tool }),
   setMulti: (multiSelect) => set({ multiSelect }),
   setDialog: (dialog) => set({ dialog }),
-  setActiveStudy: (id) => set({ activeStudyId: id, view: get().view === "calc" ? "split" : get().view }),
-  setActiveChart: (id) => set({ activeChartId: id }),
+  setActiveStudy: (id) =>
+    set((st) => {
+      const builder = Boolean(st.project.studies.find((s) => s.id === id)?.isBuilder);
+      const view = builder ? "builder" : st.view === "calc" || st.view === "builder" ? "split" : st.view;
+      return { activeStudyId: id, view };
+    }),
+  setActiveChart: (id) =>
+    set((st) => {
+      if (!id) return { activeChartId: null };
+      const top = Math.max(0, ...Object.values(st.zOrder));
+      return { activeChartId: id, zOrder: st.zOrder[id] === top && top > 0 ? st.zOrder : { ...st.zOrder, [id]: top + 1 } };
+    }),
   setChartsFilter: (chartsFilter) => set({ chartsFilter }),
 
   replaceProject: (p) => {
@@ -241,11 +284,44 @@ export const useApp = create<AppState>((set, get) => ({
       view: st.view === "calc" ? "split" : st.view,
     }));
   },
+  addBuilderStudy: (name) => {
+    const study: Study = {
+      id: uid(),
+      name,
+      isBuilder: true,
+      columns: [],
+      rateColumns: [],
+      roles: {},
+      rateRoles: {},
+      testType: "buildup",
+      tpSeconds: 0,
+      rateBeforeM3s: 0,
+    };
+    set((st) => ({
+      project: { ...st.project, studies: [...st.project.studies, study] },
+      activeStudyId: study.id,
+      view: "builder",
+      activeChartId: null,
+    }));
+    return study.id;
+  },
+  builderAddData: (studyId, columns, chart) =>
+    set((st) => {
+      const exists = st.project.charts.some((c) => c.id === chart.id);
+      const project = mapStudy(st.project, studyId, (s) => normalizeRows({ ...s, columns: [...s.columns, ...columns] }));
+      return {
+        project: exists ? mapChart(project, chart.id, () => chart) : { ...project, charts: [...project.charts, chart] },
+        activeChartId: chart.id,
+      };
+    }),
   updateStudy: (id, patch) => set((st) => ({ project: mapStudy(st.project, id, (s) => ({ ...s, ...patch })) })),
   removeStudy: (id) =>
     set((st) => {
-      if (st.project.studies.find((s) => s.id === id)?.isMain) return {};
+      const removed = st.project.studies.find((s) => s.id === id);
+      if (!removed || removed.isMain) return {};
       const studies = st.project.studies.filter((s) => s.id !== id);
+      // Следующая активная вкладка — того же вида (набор построителя или исследование).
+      const next = studies.find((s) => Boolean(s.isBuilder) === Boolean(removed.isBuilder)) ?? (removed.isBuilder ? undefined : studies[0]);
       return {
         project: {
           ...st.project,
@@ -253,7 +329,7 @@ export const useApp = create<AppState>((set, get) => ({
           charts: st.project.charts.filter((c) => c.studyId !== id),
           groups: st.project.groups.map((g) => ({ ...g, studyIds: g.studyIds.filter((x) => x !== id) })),
         },
-        activeStudyId: st.activeStudyId === id ? (studies[0]?.id ?? null) : st.activeStudyId,
+        activeStudyId: st.activeStudyId === id ? (next?.id ?? null) : st.activeStudyId,
       };
     }),
   replaceTable: (studyId, part, columns) =>

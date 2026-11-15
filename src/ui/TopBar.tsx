@@ -69,7 +69,11 @@ export function TopBar() {
     ["split", "Таблица + графики"],
     ["charts", "Только графики"],
     ["calc", "Калькулятор"],
+    ["builder", "Построитель графиков"],
   ];
+  const builder = view === "builder";
+  // В построителе — только его наборы графиков, в остальных видах — главная страница и исследования.
+  const tabs = studies.filter((s) => Boolean(s.isBuilder) === builder);
   return (
     <header className="topbar">
       <div className="topbar-row">
@@ -86,12 +90,18 @@ export function TopBar() {
         </div>
         <span className="grow" />
         <ProjectMenu />
-        <button type="button" className="btn primary" onClick={() => st.setDialog({ kind: "import", part: useApp.getState().tablePart })}>
-          <Icon name="upload" size={16} /> Загрузить данные
-        </button>
+        {builder ? (
+          <button type="button" className="btn primary" disabled={!active || !tabs.some((s) => s.id === active)} onClick={() => st.setDialog({ kind: "builderImport" })}>
+            <Icon name="upload" size={16} /> Загрузить график
+          </button>
+        ) : (
+          <button type="button" className="btn primary" onClick={() => st.setDialog({ kind: "import", part: useApp.getState().tablePart })}>
+            <Icon name="upload" size={16} /> Загрузить данные
+          </button>
+        )}
       </div>
-      <div role="tablist" aria-label="Исследования" className="study-tabs">
-        {studies.map((s) => {
+      <div role="tablist" aria-label={builder ? "Наборы графиков" : "Исследования"} className="study-tabs">
+        {tabs.map((s) => {
           const on = s.id === active && view !== "calc";
           if (s.isMain)
             return (
@@ -102,6 +112,38 @@ export function TopBar() {
                 </button>
                 <button type="button" className="tab-gear" aria-label="Настройки главной страницы" title="Столбцы и режим времени дебитов" onClick={() => st.setDialog({ kind: "study", studyId: s.id })}>
                   <Icon name="gear" size={13} />
+                </button>
+              </div>
+            );
+          if (s.isBuilder)
+            return (
+              <div key={s.id} className={`study-tab builder-tab${on ? " on" : ""}`}>
+                <button type="button" role="tab" aria-selected={on} onClick={() => st.setActiveStudy(s.id)}>
+                  <Icon name="columns" size={14} />
+                  {s.name}
+                </button>
+                <button
+                  type="button"
+                  className="tab-gear"
+                  aria-label={`Переименовать ${s.name}`}
+                  title="Переименовать"
+                  onClick={() => {
+                    const n = prompt("Название набора графиков", s.name);
+                    if (n?.trim()) st.updateStudy(s.id, { name: n.trim() });
+                  }}
+                >
+                  <Icon name="gear" size={13} />
+                </button>
+                <button
+                  type="button"
+                  className="tab-close"
+                  aria-label={`Удалить ${s.name}`}
+                  title="Удалить набор графиков"
+                  onClick={() => {
+                    if (confirm(`Удалить «${s.name}» вместе с графиками и данными?`)) st.removeStudy(s.id);
+                  }}
+                >
+                  <Icon name="close" size={12} />
                 </button>
               </div>
             );
@@ -130,9 +172,23 @@ export function TopBar() {
             </div>
           );
         })}
-        <button type="button" className="tab-add" title="Создать исследование из выделенного на главной странице" onClick={() => st.setDialog({ kind: "createStudy" })}>
-          + Новое
-        </button>
+        {builder ? (
+          <button
+            type="button"
+            className="tab-add"
+            title="Новый набор графиков"
+            onClick={() => {
+              const n = useApp.getState().project.studies.filter((s) => s.isBuilder).length;
+              st.addBuilderStudy(`Построитель ${n + 1}`);
+            }}
+          >
+            + Новый набор
+          </button>
+        ) : (
+          <button type="button" className="tab-add" title="Создать исследование из выделенного на главной странице" onClick={() => st.setDialog({ kind: "createStudy" })}>
+            + Новое
+          </button>
+        )}
       </div>
     </header>
   );

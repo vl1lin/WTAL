@@ -61,6 +61,8 @@ export interface Study {
   testTypeAuto?: boolean;
   /** Отсчёт Δt: от последней смены дебита (по умолчанию) или от первой строки давления. */
   dtFrom?: "rateChange" | "firstPoint";
+  /** Исследование построителя графиков: только графики с загруженными данными (без пересчёта). */
+  isBuilder?: boolean;
   /** Главная страница: вся история скважины, из неё создаются исследования. */
   isMain?: boolean;
   testType: TestType;
@@ -94,6 +96,13 @@ export interface LineDef {
   /** Прямая в координатах осей (для "two-point" и тренда "axis"). */
   p1?: AxisPoint;
   p2?: AxisPoint;
+  /**
+   * Прямая продолжается за точки p1, p2 до границ графика.
+   * Не задано — бесконечная (прямые до версии с отрезками и тренды); отрезок — false.
+   */
+  infinite?: boolean;
+  /** Кривая через узлы (координаты осей) — сглаженная линия через точки. */
+  curve?: AxisPoint[];
   /** Тренд: тип аппроксимации, по каким строкам и серии построен, коэффициенты. */
   trend?: {
     fit: FitType;
@@ -140,7 +149,12 @@ export interface ChartDef {
   derivL: number;
   /** Для графика по столбцам: X и Y-серии. */
   xColumn?: string;
-  yColumns?: { columnId: string; color: string; marker: Marker }[];
+  /** Серии Y; у серии может быть свой столбец X (наложение выгрузок с разными точками по времени). */
+  yColumns?: { columnId: string; color: string; marker: Marker; xColumnId?: string }[];
+  /** Вид точек: размер маркера (множитель), непрозрачность 0..1, прореживание (каждая N-я точка). */
+  pointStyle?: { size: number; opacity: number; thin: number };
+  /** Настройки отдельных серий по ключу серии: скрыть, цвет, маркер. */
+  seriesStyle?: Record<string, { hidden?: boolean; color?: string; marker?: Marker }>;
   /** Ограничение строк (график по выделенным данным). */
   rows?: number[];
   /** Дополнительные исследования для наложения (только log-log производные). */

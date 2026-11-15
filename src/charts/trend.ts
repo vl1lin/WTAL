@@ -74,6 +74,9 @@ export interface LineStats {
  * @returns уравнение, наклон, угол, R²
  */
 export function lineStats(l: LineDef, chart: ChartDef, data: ChartData, selected: Set<number>): LineStats {
+  if (l.curve) {
+    return { equation: `Кривая через ${l.curve.length} узл.`, slope: null, intercept: null, angleDeg: null, r2: null, points: l.curve.length };
+  }
   if (l.trend && l.trend.fit !== "axis") {
     const t = { fit: l.trend.fit, coeffs: l.trend.coeffs, r2: l.trend.r2, xLog: chart.xLog, yLog: chart.yLog };
     return { equation: trendEquation(t), slope: null, intercept: null, angleDeg: null, r2: l.trend.r2, points: l.trend.rows.length };

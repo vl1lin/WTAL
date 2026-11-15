@@ -148,6 +148,35 @@ function loglogSeries(chart: ChartDef, study: Study, colors: [string, string], s
  * @returns серии и подписи осей
  */
 export function buildChartData(chart: ChartDef, project: Project): ChartData {
+  return applySeriesStyle(chart, buildChartDataUnstyled(chart, project));
+}
+
+/**
+ * Применить настройки серий графика: скрытие, цвет, маркер.
+ * @param chart график (seriesStyle)
+ * @param data данные графика
+ * @returns данные с изменёнными сериями
+ */
+function applySeriesStyle(chart: ChartDef, data: ChartData): ChartData {
+  const st = chart.seriesStyle;
+  if (!st) return data;
+  return {
+    ...data,
+    series: data.series
+      .filter((s) => !st[s.key]?.hidden)
+      .map((s) => {
+        const o = st[s.key];
+        return o ? { ...s, color: o.color ?? s.color, marker: o.marker ?? s.marker } : s;
+      }),
+  };
+}
+
+/** Все серии графика без учёта скрытия (для окна «Вид точек»). */
+export function buildChartDataAllSeries(chart: ChartDef, project: Project): ChartData {
+  return buildChartDataUnstyled(chart, project);
+}
+
+function buildChartDataUnstyled(chart: ChartDef, project: Project): ChartData {
   const data = buildChartDataRaw(chart, project);
   if (data.warning || chart.kind === "columns" || chart.kind === "rates" || chart.kind === "combo") return data;
   // Пустой график — объяснить почему, а не показывать пустоту.
@@ -196,11 +225,13 @@ function buildChartDataRaw(chart: ChartDef, project: Project): ChartData {
     const ci = study.columns.findIndex((c) => c.id === chart.xColumn);
     const xc = study.columns[ci];
     if (!xc) return { series: [], xLabel: "", yLabel: "", warning: "Выберите столбец X" };
-    const xv = sheet.numeric(xc.id);
+    const xvMain = sheet.numeric(xc.id);
     const series: Series[] = (chart.yColumns ?? []).flatMap((yc, k) => {
       const col = study.columns.find((c) => c.id === yc.columnId);
       if (!col) return [];
       const yv = sheet.numeric(col.id);
+      // У серии может быть свой столбец X (наложение выгрузок).
+      const xv = yc.xColumnId && study.columns.some((c) => c.id === yc.xColumnId) ? sheet.numeric(yc.xColumnId) : xvMain;
       const pts: SeriesPoint[] = [];
       for (let r = 0; r < sheet.rowCount; r++) {
         if (rowsAllowed && !rowsAllowed.has(r)) continue;

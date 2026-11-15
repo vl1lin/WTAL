@@ -35,16 +35,40 @@ interface Cell {
   r: number;
 }
 
-export function DataTable({ study, part }: { study: Study; part: TablePart }) {
+export function DataTable({
+  study,
+  part,
+  chartView,
+}: {
+  study: Study;
+  part: TablePart;
+  /** Режим «таблица графика» (построитель): только столбцы графика, своё выделение и заголовок. */
+  chartView?: { columnIds: string[]; selKey: string; header: React.ReactNode };
+}) {
   const st = useApp.getState();
   const isP = part === "p";
-  // Выделение строк связано с графиками только для таблицы давления.
-  const selKey = isP ? study.id : `${study.id}:q`;
+  // Выделение строк связано с графиками только для таблицы давления (или своё у графика построителя).
+  const selKey = chartView ? chartView.selKey : isP ? study.id : `${study.id}:q`;
   const selRows = useApp((s) => s.selection[selKey]);
   const sheet = isP ? sheetOf(study) : rateSheetOf(study);
-  const columns = isP ? study.columns : study.rateColumns;
+  const allCols = isP ? study.columns : study.rateColumns;
+  // Показываемые столбцы → индексы в таблице исследования (формулы и правки идут по реальным индексам).
+  const view = useMemo(
+    () =>
+      chartView
+        ? chartView.columnIds.map((id) => allCols.findIndex((c) => c.id === id)).filter((i) => i >= 0)
+        : allCols.map((_, i) => i),
+    [chartView, allCols],
+  );
+  const columns = useMemo(() => view.map((i) => allCols[i]).filter((c): c is NonNullable<typeof c> => Boolean(c)), [view, allCols]);
+  const real = (c: number): number => view[c] ?? c;
   const nCols = columns.length;
-  const nRows = Math.max(sheet.rowCount, 1);
+  const filled = chartView ? columns.reduce((m, c) => {
+    let n = c.cells.length;
+    while (n > 0 && (c.cells[n - 1] ?? "").trim() === "") n--;
+    return Math.max(m, n);
+  }, 0) : sheet.rowCount;
+  const nRows = Math.max(filled, 1);
   const [active, setActive] = useState<Cell>({ c: 0, r: 0 });
   const [anchor, setAnchor] = useState<Cell>({ c: 0, r: 0 });
   const [editing, setEditing] = useState<string | null>(null);
@@ -130,7 +154,7 @@ export function DataTable({ study, part }: { study: Study; part: TablePart }) {
   };
 
   const commit = (value: string, c = active.c, d = active.r): void => {
-    st.setCell(study.id, c, realRow(d), value.trim() === "" ? "" : value, part);
+    st.setCell(study.id, real(c), realRow(d), value.trim() === "" ? "" : value, part);
   };
 
   /** Заполнить вниз: первая строка диапазона копируется в остальные со сдвигом ссылок. */
@@ -142,14 +166,14 @@ export function DataTable({ study, part }: { study: Study; part: TablePart }) {
     const upd: { col: number; row: number; value: string }[] = [];
     for (let c = c0; c <= c1; c++) {
       const src = columns[c]?.cells[r0] ?? "";
-      for (let r = r0 + 1; r <= toD; r++) upd.push({ col: c, row: r, value: shiftFormula(src, r - r0, 0) });
+      for (let r = r0 + 1; r <= toD; r++) upd.push({ col: real(c), row: r, value: shiftFormula(src, r - r0, 0) });
     }
     st.setCells(study.id, upd, part);
   };
 
   const clearRange = (): void => {
     const upd: { col: number; row: number; value: string }[] = [];
-    for (let c = c0; c <= c1; c++) for (let d = r0; d <= r1; d++) upd.push({ col: c, row: realRow(d), value: "" });
+    for (let c = c0; c <= c1; c++) for (let d = r0; d <= r1; d++) upd.push({ col: real(c), row: realRow(d), value: "" });
     st.setCells(study.id, upd, part);
   };
 
@@ -157,7 +181,7 @@ export function DataTable({ study, part }: { study: Study; part: TablePart }) {
     const lines: string[] = [];
     for (let d = r0; d <= r1; d++) {
       const cells: string[] = [];
-      for (let c = c0; c <= c1; c++) cells.push(sheet.display(c, realRow(d)));
+      for (let c = c0; c <= c1; c++) cells.push(sheet.display(real(c), realRow(d)));
       lines.push(cells.join("\t"));
     }
     return lines.join("\n");
@@ -173,7 +197,7 @@ export function DataTable({ study, part }: { study: Study; part: TablePart }) {
         if (c >= nCols) return;
         const d = active.r + i;
         const row = d < nRows ? realRow(d) : d;
-        upd.push({ col: c, row, value: v });
+        upd.push({ col: real(c), row, value: v });
       });
     });
     st.setCells(study.id, upd, part);
@@ -311,7 +335,7 @@ export function DataTable({ study, part }: { study: Study; part: TablePart }) {
   const rowsShown: number[] = [];
   for (let d = first; d <= last; d++) rowsShown.push(d);
 
-  if (isP && nCols === 0) {
+  if (isP && nCols === 0 && !chartView) {
     return (
       <div className="table-panel">
         <div className="table-toolbar">
@@ -374,6 +398,9 @@ export function DataTable({ study, part }: { study: Study; part: TablePart }) {
 
   return (
     <div className="table-panel" onContextMenu={(e) => e.preventDefault()}>
+      {chartView ? (
+        chartView.header
+      ) : (
       <div className="table-toolbar">
         <div role="tablist" aria-label="Таблица" className="seg small-seg">
           <button type="button" role="tab" aria-selected={isP} className={isP ? "on" : ""} onClick={() => st.setTablePart("p")}>
@@ -412,9 +439,10 @@ export function DataTable({ study, part }: { study: Study; part: TablePart }) {
           </button>
         )}
       </div>
+      )}
       <div className="formula-bar">
         <span className="addr" aria-label="Адрес ячейки">
-          {colLetter(active.c)}
+          {colLetter(real(active.c))}
           {realRow(active.r) + 1}
         </span>
         <i className="fx" aria-hidden="true">ƒx</i>
@@ -474,7 +502,7 @@ export function DataTable({ study, part }: { study: Study; part: TablePart }) {
               <th style={{ width: HEAD_W }} />
               {columns.map((c, i) => (
                 <th key={c.id} style={{ width: COL_W }} className={i >= c0 && i <= c1 ? "hl" : ""}>
-                  {colLetter(i)}
+                  {colLetter(real(i))}
                 </th>
               ))}
               <th style={{ width: COL_W / 2 }} />
@@ -509,15 +537,17 @@ export function DataTable({ study, part }: { study: Study; part: TablePart }) {
                 );
               })}
               <th>
+                {!chartView && (
                 <button
                   type="button"
                   className="add-col"
                   aria-label="Добавить пустой столбец"
                   title="Добавить пустой столбец"
-                  onClick={() => st.addColumn(study.id, { name: `Столбец ${colLetter(nCols)}` }, undefined, part)}
+                  onClick={() => st.addColumn(study.id, { name: `Столбец ${colLetter(allCols.length)}` }, undefined, part)}
                 >
                   +
                 </button>
+                )}
               </th>
             </tr>
           </thead>
@@ -534,8 +564,8 @@ export function DataTable({ study, part }: { study: Study; part: TablePart }) {
                   {columns.map((c, ci) => {
                     const isActive = ci === active.c && d === active.r;
                     const inR = inRange(ci, d);
-                    const err = sheet.errorAt(ci, r);
-                    const text = sheet.display(ci, r);
+                    const err = sheet.errorAt(real(ci), r);
+                    const text = sheet.display(real(ci), r);
                     const isFormula = (c.cells[r] ?? "").startsWith("=") || (!c.cells[r] && Boolean(c.formula));
                     const filling = fillTo !== null && ci >= c0 && ci <= c1 && d > r1 && d <= fillTo;
                     return (
@@ -582,15 +612,19 @@ export function DataTable({ study, part }: { study: Study; part: TablePart }) {
             ["Вставить", "Ctrl+V", () => void navigator.clipboard?.readText().then(pasteText).catch(() => alert("Нажмите Ctrl+V в таблице"))],
             ["Очистить", "Del", clearRange],
             null,
-            ["Вставить столбец слева", "", () => st.addColumn(study.id, { name: `Столбец ${colLetter(nCols)}` }, menu.col, part)],
-            ["Вставить столбец справа", "", () => st.addColumn(study.id, { name: `Столбец ${colLetter(nCols)}` }, menu.col + 1, part)],
+            ...(chartView
+              ? []
+              : ([
+                  ["Вставить столбец слева", "", () => st.addColumn(study.id, { name: `Столбец ${colLetter(allCols.length)}` }, real(menu.col), part)],
+                  ["Вставить столбец справа", "", () => st.addColumn(study.id, { name: `Столбец ${colLetter(allCols.length)}` }, real(menu.col) + 1, part)],
+                ] as MenuItem[])),
             ["Вставить строку выше", "", () => (sort ? alert("Снимите сортировку") : st.insertRow(study.id, realRow(active.r), part))],
             null,
             ["Свойства столбца…", "", () => {
               const col = columns[menu.col];
               if (col) st.setDialog({ kind: "columnProps", columnId: col.id, part });
             }],
-            ...(isP
+            ...(isP && !chartView
               ? ([["Построить график по выделенным строкам…", "", () => st.setDialog({ kind: "flex", rows: useApp.getState().selection[study.id] ?? [] })]] as MenuItem[])
               : []),
           ]}

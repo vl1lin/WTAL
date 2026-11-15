@@ -10,7 +10,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChartDef, View } from "../core/types";
-import { useApp, tileCharts } from "../store";
+import { useApp, tileCharts, selKeyOf } from "../store";
 import { buildChartData, rateChangeHours } from "./series";
 import { ChartView } from "./ChartView";
 import { autoView } from "./geometry";
@@ -43,7 +43,7 @@ function ComboHost({ chart }: { chart: ChartDef }) {
   const project = useApp((s) => s.project);
   const tool = useApp((s) => s.tool);
   const multi = useApp((s) => s.multiSelect);
-  const sel = useApp((s) => s.selection[chart.studyId]);
+  const sel = useApp((s) => s.selection[selKeyOf(chart, s.project)]);
   const selectedLine = useApp((s) => s.selectedLine);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const study = project.studies.find((s) => s.id === chart.studyId);
@@ -86,7 +86,7 @@ function ComboHost({ chart }: { chart: ChartDef }) {
           selected={selected}
           selectedLineId={selectedLine?.chartId === chart.id ? selectedLine.lineId : null}
           onView={(v) => st.updateChart(chart.id, { view: v, view2: { ...botView, xmin: v.xmin, xmax: v.xmax } })}
-          onSelectRows={(rows, add) => applySelection(chart.studyId, rows, add)}
+          onSelectRows={(rows, add) => applySelection(selKeyOf(chart, useApp.getState().project), rows, add)}
           onAddLine={(l) => st.addLine(chart.id, l)}
           onUpdateLine={(id, patch) => st.updateLine(chart.id, id, patch)}
           onSelectLine={(id, info) => st.selectLine(id ? { chartId: chart.id, lineId: id } : null, info)}
@@ -117,7 +117,7 @@ function SingleHost({ chart }: { chart: ChartDef }) {
   const project = useApp((s) => s.project);
   const tool = useApp((s) => s.tool);
   const multi = useApp((s) => s.multiSelect);
-  const sel = useApp((s) => s.selection[chart.studyId]);
+  const sel = useApp((s) => s.selection[selKeyOf(chart, s.project)]);
   const selectedLine = useApp((s) => s.selectedLine);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const studiesKey = useMemo(
@@ -141,7 +141,7 @@ function SingleHost({ chart }: { chart: ChartDef }) {
         multi={multi}
         selectedLineId={selectedLine?.chartId === chart.id ? selectedLine.lineId : null}
         onView={(view) => st.updateChart(chart.id, { view })}
-        onSelectRows={(rows, add) => applySelection(chart.studyId, rows, add)}
+        onSelectRows={(rows, add) => applySelection(selKeyOf(chart, useApp.getState().project), rows, add)}
         onAddLine={(l) => st.addLine(chart.id, l)}
         onUpdateLine={(id, patch) => st.updateLine(chart.id, id, patch)}
         onSelectLine={(id, info) => st.selectLine(id ? { chartId: chart.id, lineId: id } : null, info)}
@@ -211,6 +211,7 @@ function ChartContextMenu(props: { chart: ChartDef; x: number; y: number; onClos
   return (
     <div ref={ref} className="menu" role="menu" style={{ left, top, position: "fixed" }}>
       {item("Параметры графика…", () => st.setDialog({ kind: "chartSettings", chartId: chart.id }))}
+      {item("Вид точек…", () => st.setDialog({ kind: "pointStyle", chartId: chart.id }))}
       {item("Логарифмическая ось X", () => toggleAxis("x"), chart.xLog)}
       {item("Логарифмическая ось Y", () => toggleAxis("y"), chart.yLog)}
       {item("Сетка", () => st.updateChart(chart.id, { showGrid: !chart.showGrid }), chart.showGrid)}
@@ -283,6 +284,8 @@ type Resize = "move" | "e" | "s" | "se" | "w" | "n" | "nw" | "ne" | "sw";
 
 function ChartWindow({ chart, area }: { chart: ChartDef; area: { w: number; h: number } }) {
   const active = useApp((s) => s.activeChartId === chart.id);
+  // Окно, с которым работали последним, — поверх остальных; развёрнутое — поверх всех.
+  const z = useApp((s) => s.zOrder[chart.id] ?? 0);
   const st = useApp.getState();
   const drag = useRef<{ mode: Resize; sx: number; sy: number; rect: ChartDef["rect"] } | null>(null);
   const r = chart.maximized ? { x: 0, y: 0, w: area.w, h: area.h } : chart.rect;
@@ -327,15 +330,15 @@ function ChartWindow({ chart, area }: { chart: ChartDef; area: { w: number; h: n
       className={`win${active ? " active" : ""}`}
       data-chart={chart.id}
       aria-label={chart.name}
-      style={{ left: r.x, top: r.y, width: r.w, height, zIndex: active ? 5 : 1 }}
+      style={{ left: r.x, top: r.y, width: r.w, height, zIndex: (chart.maximized ? 10_000 : 0) + (active ? 5_000 : 0) + z }}
       onPointerDown={() => st.setActiveChart(chart.id)}
     >
       <header className="win-head" onPointerDown={start("move")} onPointerMove={move} onPointerUp={end} onDoubleClick={() => st.updateChart(chart.id, { maximized: !chart.maximized })}>
         <ChartTitle chart={chart} />
-        <button type="button" className="win-btn" aria-label={chart.minimized ? "Развернуть окно" : "Свернуть"} onPointerDown={(e) => e.stopPropagation()} onClick={() => st.updateChart(chart.id, { minimized: !chart.minimized, maximized: false })}>
+        <button type="button" className="win-btn" aria-label={chart.minimized ? "Развернуть окно" : "Свернуть"} onPointerDown={(e) => e.stopPropagation()} onClick={() => { st.setActiveChart(chart.id); st.updateChart(chart.id, { minimized: !chart.minimized, maximized: false }); }}>
           <Icon name="minimize" size={14} />
         </button>
-        <button type="button" className="win-btn" aria-label={chart.maximized ? "Восстановить размер" : "Во весь экран"} onPointerDown={(e) => e.stopPropagation()} onClick={() => st.updateChart(chart.id, { maximized: !chart.maximized, minimized: false })}>
+        <button type="button" className="win-btn" aria-label={chart.maximized ? "Восстановить размер" : "Во весь экран"} onPointerDown={(e) => e.stopPropagation()} onClick={() => { st.setActiveChart(chart.id); st.updateChart(chart.id, { maximized: !chart.maximized, minimized: false }); }}>
           <Icon name={chart.maximized ? "restore" : "maximize"} size={14} />
         </button>
         <button type="button" className="win-btn" aria-label="Скрыть график" onPointerDown={(e) => e.stopPropagation()} onClick={() => st.updateChart(chart.id, { visible: false })}>
@@ -356,7 +359,7 @@ function ChartWindow({ chart, area }: { chart: ChartDef; area: { w: number; h: n
 }
 
 /** Область свободных окон графиков активного исследования. */
-export function ChartArea({ studyId }: { studyId: string }) {
+export function ChartArea({ studyId, emptyHint }: { studyId: string; emptyHint?: React.ReactNode }) {
   const charts = useApp((s) => s.project.charts);
   const ref = useRef<HTMLDivElement>(null);
   const [area, setArea] = useState({ w: 0, h: 0 });
@@ -388,7 +391,9 @@ export function ChartArea({ studyId }: { studyId: string }) {
         <ChartWindow key={c.id} chart={c} area={area} />
       ))}
       {mine.filter((c) => c.visible).length === 0 && (
-        <div className="empty-hint">Нет открытых графиков. Создайте график в группе «Графики» слева или откройте его кнопкой «Графики» внизу.</div>
+        <div className="empty-hint">
+          {mine.length === 0 && emptyHint ? emptyHint : "Нет открытых графиков. Создайте график в группе «Графики» слева или откройте его кнопкой «Графики» внизу."}
+        </div>
       )}
       <ChartsMenu charts={mine} area={area} />
     </div>
@@ -400,7 +405,7 @@ export function ChartGrid() {
   const project = useApp((s) => s.project);
   const filter = useApp((s) => s.chartsFilter);
   const st = useApp.getState();
-  const ids = filter ?? project.studies.filter((s) => !s.isMain).map((s) => s.id);
+  const ids = filter ?? project.studies.filter((s) => !s.isMain && !s.isBuilder).map((s) => s.id);
   const charts = project.charts.filter((c) => ids.includes(c.studyId) && c.visible);
   const max = charts.find((c) => c.maximized);
   const shown = max ? [max] : charts;
@@ -409,7 +414,7 @@ export function ChartGrid() {
     <div className="grid-view">
       <div className="grid-filter">
         <b>Показать исследования:</b>
-        {project.studies.map((s) => {
+        {project.studies.filter((s) => !s.isBuilder).map((s) => {
           const on = ids.includes(s.id);
           return (
             <label key={s.id} className={`chip${on ? " on" : ""}`}>

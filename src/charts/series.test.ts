@@ -59,3 +59,42 @@ describe("пустой график объясняет причину", () => {
     expect(d.series[0]?.points.length).toBe(4);
   });
 });
+
+describe("построитель: серии со своим X и стили серий", () => {
+  const b: Study = {
+    id: "b",
+    name: "b",
+    isBuilder: true,
+    columns: [
+      { id: "x1", name: "Δt, ч", quantity: "other", unit: "-", cells: ["1", "2", "3", ""] },
+      { id: "y1", name: "Δp, атм", quantity: "other", unit: "-", cells: ["10", "20", "30", ""] },
+      { id: "x2", name: "Δt, ч", quantity: "other", unit: "-", cells: ["0,5", "1,5", "2,5", "3,5"] },
+      { id: "y2", name: "Δp, атм", quantity: "other", unit: "-", cells: ["5", "6", "7", "8"] },
+    ],
+    roles: {},
+    rateColumns: [],
+    rateRoles: {},
+    testType: "buildup",
+    tpSeconds: 0,
+    rateBeforeM3s: 0,
+  };
+  const chart = newChart("columns", "b", {
+    xColumn: "x1",
+    yColumns: [
+      { columnId: "y1", color: "#000", marker: "dot", xColumnId: "x1" },
+      { columnId: "y2", color: "#f00", marker: "dot", xColumnId: "x2" },
+    ],
+  });
+  it("каждая серия берёт свой столбец X, значения — как есть", () => {
+    const d = buildChartData(chart, project(b));
+    expect(d.series).toHaveLength(2);
+    expect(d.series[0]?.points.map((p) => p.x)).toEqual([1, 2, 3]);
+    expect(d.series[1]?.points.map((p) => p.x)).toEqual([0.5, 1.5, 2.5, 3.5]);
+    expect(d.series[1]?.points[3]?.y).toBe(8);
+  });
+  it("скрытая серия не строится", () => {
+    const key = buildChartData(chart, project(b)).series[1]?.key ?? "";
+    const d = buildChartData({ ...chart, seriesStyle: { [key]: { hidden: true } } }, project(b));
+    expect(d.series.map((s) => s.key)).not.toContain(key);
+  });
+});

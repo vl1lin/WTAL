@@ -7,6 +7,7 @@
  *   ├─ view = split  : DataTable | разделитель | ChartArea (+ LineInfo)
  *   ├─ view = charts : ChartGrid (+ LineInfo)
  *   ├─ view = calc   : Calculator
+ *   ├─ view = builder: BuilderView (построитель графиков по загруженным данным)
  *   ├─ StatusBar
  *   └─ активный диалог (store.dialog)
  */
@@ -20,9 +21,11 @@ import { ChartArea, ChartGrid } from "./charts/ChartHost";
 import { LineInfo } from "./charts/LineInfo";
 import { Calculator } from "./calc/Calculator";
 import { ImportDialog } from "./dialogs/ImportDialog";
-import { ChartSettingsDialog, ColumnsChartDialog, FlexDialog, TrendDialog } from "./dialogs/ChartDialogs";
+import { ChartSettingsDialog, ColumnsChartDialog, FlexDialog, PointStyleDialog, TrendDialog } from "./dialogs/ChartDialogs";
 import { ColumnPropsDialog, NewColumnDialog, StudyDialog } from "./dialogs/ColumnDialogs";
 import { CreateStudyDialog } from "./dialogs/CreateStudyDialog";
+import { BuilderView } from "./builder/BuilderView";
+import { BuilderImportDialog, OverlayDialog } from "./builder/BuilderDialogs";
 
 const TOOL_NAMES: Record<string, string> = {
   pan: "Рука — перетаскивание графика",
@@ -30,10 +33,11 @@ const TOOL_NAMES: Record<string, string> = {
   rect: "Выделение прямоугольником",
   lasso: "Выделение лассо",
   click: "Выделение по точкам (Shift — добавить)",
-  line2: "Прямая по двум точкам — два клика по графику",
+  line2: "Отрезок по двум точкам — два клика (с Ctrl — прямая на весь график)",
+  curve: "Кривая через точки — клики по узлам; двойной клик, Enter или ПКМ — завершить, Esc — отменить",
   pickline: "Выбор прямой — клик по прямой",
   info: "Информация о прямой — клик по прямой",
-  editline: "Изменить прямую — тянуть узел/линию; Ctrl — по горизонтали, Shift — по вертикали",
+  editline: "Изменить — Ctrl: по горизонтали, Shift: по вертикали, Alt + узел: длина",
 };
 
 /** Координаты курсора над графиком (вместо подписи на самом графике). */
@@ -68,6 +72,12 @@ function Dialogs() {
       return <StudyDialog studyId={d.studyId} />;
     case "createStudy":
       return <CreateStudyDialog />;
+    case "pointStyle":
+      return <PointStyleDialog chartId={d.chartId} />;
+    case "builderImport":
+      return <BuilderImportDialog chartId={d.chartId} />;
+    case "overlay":
+      return <OverlayDialog />;
   }
 }
 
@@ -103,6 +113,8 @@ export function App() {
         {view !== "calc" && <Sidebar />}
         {view === "calc" ? (
           <Calculator />
+        ) : view === "builder" ? (
+          <BuilderView />
         ) : !study || !studyId ? (
           view === "charts" ? <ChartGrid /> : <Welcome />
         ) : view === "split" ? (
