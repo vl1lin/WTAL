@@ -178,6 +178,25 @@ export function tileCharts(charts: ChartDef[], area: { w: number; h: number }): 
  * @param project проект
  * @returns ключ в store.selection
  */
+/**
+ * Все столбцы, на которые ссылается график (X, серии Y и их собственные X).
+ * @param chart график
+ * @returns id столбцов (с повторами)
+ */
+export function chartColumnRefs(chart: ChartDef): string[] {
+  return [chart.xColumn, ...(chart.yColumns ?? []).flatMap((y) => [y.columnId, y.xColumnId])].filter((x): x is string => Boolean(x));
+}
+
+/**
+ * Удалить график после подтверждения пользователя.
+ * @param chart график
+ */
+export function confirmDeleteChart(chart: ChartDef): void {
+  const builder = Boolean(useApp.getState().project.studies.find((s) => s.id === chart.studyId)?.isBuilder);
+  const msg = builder ? `Удалить график «${chart.name}» вместе с его данными?` : `Удалить график «${chart.name}»?`;
+  if (confirm(msg)) useApp.getState().removeChart(chart.id);
+}
+
 export function selKeyOf(chart: ChartDef, project: Project): string {
   return project.studies.find((s) => s.id === chart.studyId)?.isBuilder ? chart.id : chart.studyId;
 }
@@ -410,10 +429,26 @@ export const useApp = create<AppState>((set, get) => ({
     set((st) => ({ project: { ...st.project, charts: [...st.project.charts, c] }, activeChartId: c.id })),
   updateChart: (id, patch) => set((st) => ({ project: mapChart(st.project, id, (c) => ({ ...c, ...patch })) })),
   removeChart: (id) =>
-    set((st) => ({
-      project: { ...st.project, charts: st.project.charts.filter((c) => c.id !== id) },
-      activeChartId: st.activeChartId === id ? null : st.activeChartId,
-    })),
+    set((st) => {
+      const chart = st.project.charts.find((c) => c.id === id);
+      const charts = st.project.charts.filter((c) => c.id !== id);
+      let studies = st.project.studies;
+      const study = studies.find((s) => s.id === chart?.studyId);
+      if (chart && study?.isBuilder) {
+        // В построителе данные принадлежат графику: удаляем его столбцы, если их не использует другой график набора.
+        const used = new Set(charts.filter((c) => c.studyId === study.id).flatMap(chartColumnRefs));
+        const drop = new Set(chartColumnRefs(chart).filter((c) => !used.has(c)));
+        studies = studies.map((s) => (s.id === study.id ? { ...s, columns: s.columns.filter((c) => !drop.has(c.id)) } : s));
+      }
+      const selection = { ...st.selection };
+      delete selection[id];
+      return {
+        project: { ...st.project, studies, charts },
+        selection,
+        activeChartId: st.activeChartId === id ? null : st.activeChartId,
+        selectedLine: st.selectedLine?.chartId === id ? null : st.selectedLine,
+      };
+    }),
   addLine: (chartId, line) =>
     set((st) => ({
       project: mapChart(st.project, chartId, (c) => ({ ...c, lines: [...c.lines, line] })),

@@ -12,7 +12,7 @@
  * Панель сворачивается в узкую полоску иконок (кнопка сверху).
  */
 import { useState } from "react";
-import { useApp, type Tool } from "../store";
+import { useApp, confirmDeleteChart, type Tool } from "../store";
 import { Icon } from "./icons";
 import { newChart } from "../core/factory";
 import type { ChartKind } from "../core/types";
@@ -151,6 +151,16 @@ export function Sidebar() {
       <Group title="Графики">
         <ToolBtn icon="loadchart" label="Загрузить" disabled={noStudy} onClick={() => st.setDialog({ kind: "builderImport" })} title="Данные графика как есть (например, выгрузка из Saphir)" />
         <ToolBtn icon="addcol" label="+ Серия" disabled={!builderChart} onClick={() => activeChartId && st.setDialog({ kind: "builderImport", chartId: activeChartId })} title="Добавить к активному графику серии из новых данных" />
+        <ToolBtn
+          icon="trash"
+          label="Удалить график"
+          disabled={!builderChart}
+          onClick={() => {
+            const c = useApp.getState().project.charts.find((x) => x.id === activeChartId);
+            if (c) confirmDeleteChart(c);
+          }}
+          title="Удалить активный график вместе с его данными"
+        />
         <ToolBtn icon="overlay" label="Наложить" disabled={noStudy} onClick={() => st.setDialog({ kind: "overlay" })} title="Собрать несколько графиков набора в одном окне" />
       </Group>
       <Group

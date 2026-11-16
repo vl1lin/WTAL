@@ -10,7 +10,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChartDef, View } from "../core/types";
-import { useApp, tileCharts, selKeyOf } from "../store";
+import { useApp, tileCharts, selKeyOf, confirmDeleteChart } from "../store";
 import { buildChartData, rateChangeHours } from "./series";
 import { ChartView } from "./ChartView";
 import { autoView } from "./geometry";
@@ -227,7 +227,7 @@ function ChartContextMenu(props: { chart: ChartDef; x: number; y: number; onClos
       {item("Экспорт PNG", () => exportPng(chart))}
       {item("Скрыть график", () => st.updateChart(chart.id, { visible: false }))}
       {item("Удалить график", () => {
-        if (confirm(`Удалить график «${chart.name}»?`)) st.removeChart(chart.id);
+        confirmDeleteChart(chart);
       })}
     </div>
   );
@@ -341,7 +341,10 @@ function ChartWindow({ chart, area }: { chart: ChartDef; area: { w: number; h: n
         <button type="button" className="win-btn" aria-label={chart.maximized ? "Восстановить размер" : "Во весь экран"} onPointerDown={(e) => e.stopPropagation()} onClick={() => { st.setActiveChart(chart.id); st.updateChart(chart.id, { maximized: !chart.maximized, minimized: false }); }}>
           <Icon name={chart.maximized ? "restore" : "maximize"} size={14} />
         </button>
-        <button type="button" className="win-btn" aria-label="Скрыть график" onPointerDown={(e) => e.stopPropagation()} onClick={() => st.updateChart(chart.id, { visible: false })}>
+        <button type="button" className="win-btn" aria-label="Удалить график" title="Удалить график" onPointerDown={(e) => e.stopPropagation()} onClick={() => confirmDeleteChart(chart)}>
+          <Icon name="trash" size={13} />
+        </button>
+        <button type="button" className="win-btn" aria-label="Скрыть график" title="Скрыть (вернуть — кнопкой «Графики» внизу)" onPointerDown={(e) => e.stopPropagation()} onClick={() => st.updateChart(chart.id, { visible: false })}>
           <Icon name="close" size={14} />
         </button>
       </header>
@@ -539,7 +542,20 @@ function ChartsMenu({ charts, area }: { charts: ChartDef[]; area: { w: number; h
             return (
               <label key={c.id} className="check-row" onClick={(e) => { e.preventDefault(); click(i, e); }}>
                 <input type="checkbox" readOnly checked={c.visible} />
-                <span className="ellipsis">{area ? c.name : `${s?.name ?? ""} · ${c.name}`}</span>
+                <span className="ellipsis grow">{area ? c.name : `${s?.name ?? ""} · ${c.name}`}</span>
+                <button
+                  type="button"
+                  className="icon-btn row-del"
+                  aria-label={`Удалить график ${c.name}`}
+                  title="Удалить график"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    confirmDeleteChart(c);
+                  }}
+                >
+                  <Icon name="trash" size={13} />
+                </button>
               </label>
             );
           })}
