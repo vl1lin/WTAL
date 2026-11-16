@@ -12,7 +12,7 @@
  *   числа (десятичная точка), строки "…", ссылки A1 / $A$1, диапазоны A1:B10,
  *   ссылки на столбцы по имени [Имя] и со смещением строки [Имя]@-1,
  *   операторы + - * / ^ & = <> < > <= >=, унарный минус, проценты,
- *   функции SQRT LN LOG10 LOG EXP POW POWER ABS ROUND MIN MAX SUM AVERAGE COUNT IF AND OR NOT
+ *   функции SQRT LN LOG10 (LG) LOG EXP POW POWER ABS ROUND MIN MAX SUM AVERAGE COUNT IF AND OR NOT
  *   PI ROW DIFF FIRST LAST. Разделитель аргументов — «;» или «,».
  */
 
@@ -334,6 +334,7 @@ const unaryMath: Record<string, (x: number) => number> = {
   SQRT: Math.sqrt,
   LN: Math.log,
   LOG10: Math.log10,
+  LG: Math.log10,
   EXP: Math.exp,
   ABS: Math.abs,
 };

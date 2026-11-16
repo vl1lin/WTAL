@@ -15,6 +15,39 @@ const KEY = "wtal.project";
 
 const viewSchema = z.object({ xmin: z.number(), xmax: z.number(), ymin: z.number(), ymax: z.number() });
 const axisPoint = z.object({ x: z.number(), y: z.number() });
+/** Число; NaN/∞ в JSON сохраняются как null. */
+const num = z.union([z.number(), z.null()]).transform((v) => (v === null ? Number.NaN : v));
+const dim = z.enum(["time", "pressure", "rate", "temperature", "length", "area", "permeability", "viscosity", "compressibility", "density", "fvf", "fraction", "invariant", "count", "none"]);
+const source = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("manual") }),
+  z.object({ kind: z.literal("line"), axes: z.enum(["any", "loglog", "semilog", "linear"]), what: z.enum(["slope", "intercept", "yAtX", "xAtY"]), at: z.number(), abs: z.boolean() }),
+  z.object({ kind: z.literal("table"), what: z.enum(["pFirst", "pLast", "pMin", "pMax", "dtLast"]) }),
+  z.object({ kind: z.literal("study"), what: z.enum(["rate", "tp"]) }),
+  z.object({ kind: z.literal("template"), templateId: z.string(), sym: z.string() }),
+]);
+/** Шаблон расчёта (проект, библиотека браузера, файл .json). */
+export const templateSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  params: z.array(
+    z.object({ id: z.string(), sym: z.string(), name: z.string(), dim, unit: z.string(), unitText: z.string().optional(), perStudy: z.boolean(), default: num, source }),
+  ),
+  formulas: z.array(
+    z.object({
+      id: z.string(),
+      sym: z.string(),
+      name: z.string(),
+      expr: z.string(),
+      dim,
+      unit: z.string(),
+      unitText: z.string().optional(),
+      result: z.boolean(),
+      agg: z.enum(["mean", "sum", "min", "max", "none"]),
+    }),
+  ),
+});
+
 const fluid = z.object({
   fvf: z.number(),
   viscosity_Pa_s: z.number(),
@@ -123,6 +156,20 @@ const projectSchema = z.object({
     units: z.record(z.string(), z.string()),
     mode: z.enum(["all", "selected", "groups"]),
     selected: z.array(z.string()),
+    templates: z.array(templateSchema).optional(),
+    activeTask: z.string().optional(),
+    tplValues: z
+      .record(
+        z.string(),
+        z.object({
+          common: z.record(z.string(), num),
+          rows: z.record(z.string(), z.record(z.string(), num)),
+          lines: z.record(z.string(), z.record(z.string(), z.string())),
+          custom: z.array(z.object({ id: z.string(), name: z.string() })),
+          units: z.record(z.string(), z.string()),
+        }),
+      )
+      .optional(),
   }),
 });
 

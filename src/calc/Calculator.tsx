@@ -1,7 +1,13 @@
 /**
- * Калькулятор: площадь поверхности трещин ГРП и полудлины по инварианте.
+ * Калькулятор: встроенный расчёт трещин ГРП и пользовательские шаблоны расчётов.
  *
  * Схема:
+ *   Calculator — список задач слева (встроенная, мои шаблоны, библиотека браузера, новый/импорт)
+ *   ├─ FractureCalc    — встроенный расчёт (ниже)
+ *   ├─ TemplateCalc    — расчёт по шаблону (TemplateCalc.tsx)
+ *   └─ TemplateEditor  — редактор шаблона (TemplateEditor.tsx)
+ *
+ * Встроенный расчёт:
  *   CalcState (СИ, store.project.calc)
  *   ├─ параметры пласта и флюидов — поля QtyInput с выбором единиц (пересчёт при смене единиц)
  *   ├─ таблица исследований: q, φ, m (m можно взять из прямой на графике исследования)
@@ -12,7 +18,11 @@ import { useMemo, useState } from "react";
 import { useApp } from "../store";
 import { QtyInput, UnitSelect, NumInput } from "../dialogs/common";
 import { fractureArea, mixture } from "../core/fracture";
-import type { CalcState, FluidProps, Study } from "../core/types";
+import type { CalcState, CalcTemplate, FluidProps, Study } from "../core/types";
+import { TemplateCalc } from "./TemplateCalc";
+import { TemplateEditor, copyTemplate } from "./TemplateEditor";
+import { loadLibrary, parseTemplateFile, removeFromLibrary } from "./library";
+import { emptyTemplate, fractureTemplate, hornerTemplate } from "../core/templates";
 import { fromSI, toSI, type Dimension } from "../core/units";
 import { fmt } from "../core/regression";
 import { lineStats } from "../charts/trend";
@@ -35,7 +45,8 @@ const DEFAULT_UNITS: Record<string, string> = {
   L: "m",
 };
 
-export function Calculator() {
+/** Встроенный расчёт: площадь трещин ГРП по инварианте. */
+function FractureCalc() {
   const calc = useApp((s) => s.project.calc);
   const allStudies = useApp((s) => s.project.studies);
   const studies = useMemo(() => allStudies.filter((s) => !s.isMain), [allStudies]);
@@ -96,31 +107,7 @@ export function Calculator() {
   };
 
   return (
-    <div className="calc">
-      <aside className="calc-tasks">
-        <h2>Задачи</h2>
-        <button type="button" className="task on">
-          <b>Площадь трещин ГРП и полудлины</b>
-          <span>по инварианте — наклону на графике √t</span>
-        </button>
-        <button type="button" className="task" disabled title="Добавим по мере появления методик">
-          <b>+ Добавить задачу</b>
-          <span>шаблон расчёта (позже)</span>
-        </button>
-        <div className="hint-box small">
-          <b>Формулы</b>
-          <div className="mono">
-            B = Bн(1−W) + Bв·W
-            <br />μ = μн·μв / (W·μн + (1−W)·μв)
-            <br />cₜ = cск + (1−W)cн + W·cв
-            <br />k = K_рад / n — проницаемость без учёта трещин
-            <br />A = 2qB / (√π·m) · √(μ / (cₜ·k·φ))
-            <br />Σx_f = A / (4·h·n)
-            <br />x̄_f = Σx_f / n
-          </div>
-          <p className="muted">Расчёт в СИ; при смене единиц значения пересчитываются автоматически.</p>
-        </div>
-      </aside>
+    <>
       <section className="calc-main">
         <div className="row gap">
           <div className="grow">
@@ -246,7 +233,7 @@ export function Calculator() {
           </table>
         </div>
       </section>
-    </div>
+    </>
   );
 }
 
@@ -291,7 +278,7 @@ function LinePicker({ study, onPick }: { study: Study; onPick(m_Pa_s05: number):
 }
 
 /** Группы исследований: создание из выбранных и удаление. */
-function GroupEditor() {
+export function GroupEditor() {
   const project = useApp((s) => s.project);
   const st = useApp.getState();
   const [open, setOpen] = useState(false);
@@ -332,6 +319,135 @@ function GroupEditor() {
             </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Подсказка с формулами встроенного расчёта. */
+function FractureHint() {
+  return (
+    <div className="hint-box small">
+      <b>Формулы</b>
+      <div className="mono">
+        B = Bн(1−W) + Bв·W
+        <br />μ = μн·μв / (W·μн + (1−W)·μв)
+        <br />cₜ = cск + (1−W)cн + W·cв
+        <br />k = K_рад / n — проницаемость без учёта трещин
+        <br />A = 2qB / (√π·m) · √(μ / (cₜ·k·φ))
+        <br />Σx_f = A / (4·h·n)
+        <br />x̄_f = Σx_f / n
+      </div>
+      <p className="muted">Расчёт в СИ; при смене единиц значения пересчитываются автоматически.</p>
+    </div>
+  );
+}
+
+/**
+ * Калькулятор: список задач (встроенный расчёт ГРП, свои шаблоны, библиотека) и выбранная задача.
+ */
+export function Calculator() {
+  const calc = useApp((s) => s.project.calc);
+  const st = useApp.getState();
+  const templates = calc.templates ?? [];
+  const active = calc.activeTask ?? "fracture";
+  const tpl = templates.find((t) => t.id === active);
+  const [editing, setEditing] = useState<{ tpl: CalcTemplate; isNew: boolean } | null>(null);
+  const [libVer, setLibVer] = useState(0);
+  const [newOpen, setNewOpen] = useState(false);
+  const [err, setErr] = useState("");
+  const library = useMemo(() => loadLibrary().filter((t) => !templates.some((x) => x.id === t.id)), [templates, libVer]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const startNew = (t: CalcTemplate): void => {
+    setNewOpen(false);
+    setEditing({ tpl: t, isNew: true });
+  };
+  const addToProject = (t: CalcTemplate): void => st.updateCalc({ templates: [...templates, t], activeTask: t.id });
+
+  return (
+    <div className="calc">
+      <aside className="calc-tasks">
+        <h2>Встроенные</h2>
+        <button type="button" className={`task${active === "fracture" && !editing ? " on" : ""}`} onClick={() => { setEditing(null); st.updateCalc({ activeTask: "fracture" }); }}>
+          <b>Площадь трещин ГРП и полудлины</b>
+          <span>по инварианте — наклону на графике √t</span>
+        </button>
+        <h2>Мои шаблоны</h2>
+        {templates.map((t) => (
+          <button key={t.id} type="button" className={`task${active === t.id && !editing ? " on" : ""}${editing?.tpl.id === t.id ? " editing" : ""}`} onClick={() => { setEditing(null); st.updateCalc({ activeTask: t.id }); }}>
+            <b>{t.name}</b>
+            <span>{t.params.length} парам. · {t.formulas.filter((f) => f.result).length} результ.</span>
+          </button>
+        ))}
+        {templates.length === 0 && <p className="muted small">Своих шаблонов пока нет.</p>}
+        <div className="picker">
+          <button type="button" className="btn primary block" aria-expanded={newOpen} onClick={() => setNewOpen(!newOpen)}>+ Новый шаблон</button>
+          {newOpen && (
+            <div className="menu picker-menu" role="menu">
+              <button type="button" role="menuitem" onClick={() => startNew(emptyTemplate())}><span>Пустой шаблон</span></button>
+              <button type="button" role="menuitem" onClick={() => startNew(fractureTemplate(calc))}><span>Копия встроенного расчёта ГРП</span></button>
+              <button type="button" role="menuitem" onClick={() => startNew(hornerTemplate())}><span>Пример: проницаемость и скин (Хорнер)</span></button>
+              {tpl && <button type="button" role="menuitem" onClick={() => startNew(copyTemplate(tpl, `${tpl.name} (копия)`))}><span>Копия «{tpl.name}»</span></button>}
+            </div>
+          )}
+        </div>
+        <label className="btn block">
+          Импорт из файла .json
+          <input
+            type="file"
+            accept=".json,application/json"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (!f) return;
+              void f.text().then((text) => {
+                try {
+                  const t = parseTemplateFile(text);
+                  setErr("");
+                  startNew(t);
+                } catch (ex) {
+                  setErr(ex instanceof Error ? ex.message : "Не удалось прочитать файл");
+                }
+              });
+            }}
+          />
+        </label>
+        {err && <p className="warn small">{err}</p>}
+        {library.length > 0 && (
+          <>
+            <h2>Библиотека браузера</h2>
+            {library.map((t) => (
+              <div key={t.id} className="lib-item">
+                <button type="button" className="task" title="Добавить в проект" onClick={() => addToProject(t)}>
+                  <b>{t.name}</b>
+                  <span>нажмите, чтобы добавить в проект</span>
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn row-del"
+                  aria-label={`Удалить ${t.name} из библиотеки`}
+                  onClick={() => {
+                    if (confirm(`Удалить «${t.name}» из библиотеки браузера?`)) {
+                      removeFromLibrary(t.id);
+                      setLibVer(libVer + 1);
+                    }
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </>
+        )}
+        {active === "fracture" && !editing && <FractureHint />}
+      </aside>
+      {editing ? (
+        <TemplateEditor key={editing.tpl.id} tpl={editing.tpl} isNew={editing.isNew} onDone={() => { setEditing(null); setLibVer(libVer + 1); }} />
+      ) : tpl ? (
+        <TemplateCalc tpl={tpl} onEdit={() => setEditing({ tpl, isNew: false })} />
+      ) : (
+        <FractureCalc />
       )}
     </div>
   );

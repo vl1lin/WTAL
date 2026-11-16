@@ -15,6 +15,7 @@
  * Все значения ячеек хранятся строками (как ввёл пользователь), числа вычисляются
  * модулем core/sheet.ts. Физические расчёты (core/welltest.ts) работают в СИ.
  */
+import type { Dimension } from "./units";
 
 /** Физический смысл столбца. */
 export type Quantity =
@@ -179,6 +180,75 @@ export interface StudyGroup {
 }
 
 /** Входные данные калькулятора, все в СИ. */
+/** Откуда параметр шаблона берёт значение. */
+export type ParamSource =
+  | { kind: "manual" }
+  /** Прямая на графике исследования: величина в единицах графика (атм, ч, м³/сут …). */
+  | { kind: "line"; axes: "any" | "loglog" | "semilog" | "linear"; what: "slope" | "intercept" | "yAtX" | "xAtY"; at: number; abs: boolean }
+  /** Давление/время анализируемого периода из таблицы исследования. */
+  | { kind: "table"; what: "pFirst" | "pLast" | "pMin" | "pMax" | "dtLast" }
+  /** Свойство исследования. */
+  | { kind: "study"; what: "rate" | "tp" }
+  /** Результат другого шаблона для того же исследования. */
+  | { kind: "template"; templateId: string; sym: string };
+
+/** Исходный параметр шаблона расчёта. */
+export interface TplParam {
+  id: string;
+  /** Обозначение в формулах. */
+  sym: string;
+  name: string;
+  /** Величина и единица, в которой значение подставляется в формулу. */
+  dim: Dimension;
+  unit: string;
+  /** Подпись единицы для величины «—» (без пересчёта). */
+  unitText?: string;
+  /** true — своё значение у каждого исследования, false — одно общее. */
+  perStudy: boolean;
+  /** Значение по умолчанию в СИ (NaN — нет). */
+  default: number;
+  source: ParamSource;
+}
+
+/** Формула шаблона: вычисляется по порядку, может ссылаться на параметры и формулы выше. */
+export interface TplFormula {
+  id: string;
+  sym: string;
+  name: string;
+  expr: string;
+  /** Величина и единица, в которой формула даёт результат. */
+  dim: Dimension;
+  unit: string;
+  unitText?: string;
+  /** Результат выводится в таблицу калькулятора; иначе — промежуточный. */
+  result: boolean;
+  /** Итог по группе. */
+  agg: "mean" | "sum" | "min" | "max" | "none";
+}
+
+/** Пользовательский шаблон расчёта. */
+export interface CalcTemplate {
+  id: string;
+  name: string;
+  description: string;
+  params: TplParam[];
+  formulas: TplFormula[];
+}
+
+/** Значения калькулятора для одного шаблона (всё в СИ). */
+export interface TplValues {
+  /** Общие параметры: sym → значение. */
+  common: Record<string, number>;
+  /** Свои значения (переопределения) по строкам: rowId → sym → значение. */
+  rows: Record<string, Record<string, number>>;
+  /** Выбранная прямая: rowId → sym → lineId. */
+  lines: Record<string, Record<string, string>>;
+  /** Свои строки расчёта, не связанные с исследованиями. */
+  custom: { id: string; name: string }[];
+  /** Единицы отображения: sym → ключ единицы. */
+  units: Record<string, string>;
+}
+
 export interface CalcState {
   h_m: number;
   fractures: number;
@@ -192,6 +262,12 @@ export interface CalcState {
   units: Record<string, string>;
   mode: "all" | "selected" | "groups";
   selected: string[];
+  /** Пользовательские шаблоны расчётов. */
+  templates?: CalcTemplate[];
+  /** Активная задача: "fracture" (встроенная) или id шаблона. */
+  activeTask?: string;
+  /** Значения калькулятора по шаблонам: templateId → значения. */
+  tplValues?: Record<string, TplValues>;
 }
 
 export interface FluidProps {
